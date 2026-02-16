@@ -1,0 +1,740 @@
+{
+  "revenue_trends": [
+    {
+      "month": "2024-10",
+      "month_name": "Oct 2024",
+      "revenue": 860931,
+      "confirmed": 806830,
+      "projected": 885143,
+      "previous_year": 911512
+    },
+    {
+      "month": "2024-11",
+      "month_name": "Nov 2024",
+      "revenue": 963150,
+      "confirmed": 846414,
+      "projected": 1034417,
+      "previous_year": 1114076
+    },
+    {
+      "month": "2024-12",
+      "month_name": "Dec 2024",
+      "revenue": 1002327,
+      "confirmed": 950992,
+      "projected": 1043316,
+      "previous_year": 862939
+    },
+    {
+      "month": "2025-01",
+      "month_name": "Jan 2025",
+      "revenue": 1021644,
+      "confirmed": 933294,
+      "projected": 1071244,
+      "previous_year": 1220805
+    },
+    {
+      "month": "2025-02",
+      "month_name": "Feb 2025",
+      "revenue": 1055919,
+      "confirmed": 959030,
+      "projected": 1125175,
+      "previous_year": 1009247
+    },
+    {
+      "month": "2025-03",
+      "month_name": "Mar 2025",
+      "revenue": 1102131,
+      "confirmed": 1045287,
+      "projected": 1143306,
+      "previous_year": 1186135
+    },
+    {
+      "month": "2025-04",
+      "month_name": "Apr 2025",
+      "revenue": 907921,
+      "confirmed": 834394,
+      "projected": 955896,
+      "previous_year": 1023051
+    },
+    {
+      "month": "2025-05",
+      "month_name": "May 2025",
+      "revenue": 1179237,
+      "confirmed": 1034259,
+      "projected": 1258746,
+      "previous_year": 1088787
+    },
+    {
+      "month": "2025-06",
+      "month_name": "Jun 2025",
+      "revenue": 1197376,
+      "confirmed": 1122613,
+      "projected": 1235196,
+      "previous_year": 1282159
+    },
+    {
+      "month": "2025-07",
+      "month_name": "Jul 2025",
+      "revenue": 1020261,
+      "confirmed": 947467,
+      "projected": 1043852,
+      "previous_year": 1195547
+    },
+    {
+      "month": "2025-08",
+      "month_name": "Aug 2025",
+      "revenue": 1223973,
+      "confirmed": 1113020,
+      "projected": 1285061,
+      "previous_year": 1111929
+    },
+    {
+      "month": "2025-09",
+      "month_name": "Sep 2025",
+      "revenue": 1003062,
+      "confirmed": 867991,
+      "projected": 1070318,
+      "previous_year": 1160396
+    }
+  ],
+  "employee_heatmap": [
+    {
+      "week": "Неделя 1",
+      "start_date": "15.09",
+      "employees": {
+        "Тоня": {
+          "daily_hours": [
+            7,
+            10,
+            7,
+            6,
+            9,
+            0,
+            2
+          ],
+          "total_hours": 41,
+          "utilization": 97.5
+        },
+        "Лена": {
+          "daily_hours": [
+            7,
+            8,
+            8,
+            10,
+            6,
+            0,
+            1
+          ],
+          "total_hours": 40,
+          "utilization": 97.5
+        },
+        "Лиза": {
+          "daily_hours": [
+            7,
+            8,
+            7,
+            10,
+            10,
+            0,
+            2
+          ],
+          "total_hours": 44,
+          "utilization": 100
+        },
+        "Костя": {
+          "daily_hours": [
+            9,
+            6,
+            7,
+            10,
+            9,
+            0,
+            3
+          ],
+          "total_hours": 44,
+          "utilization": 100
+        }
+      }
+    },
+    {
+      "week": "Неделя 2",
+      "start_date": "22.09",
+      "employees": {
+        "Тоня": {
+          "daily_hours": [
+            10,
+            7,
+            6,
+            8,
+            10,
+            0,
+            3
+          ],
+          "total_hours": 44,
+          "utilization": 100
+        },
+        "Лена": {
+          "daily_hours": [
+            10,
+            9,
+            8,
+            10,
+            6,
+            2,
+            2
+          ],
+          "total_hours": 47,
+          "utilization": 100
+        },
+        "Лиза": {
+          "daily_hours": [
+            6,
+            10,
+            9,
+            7,
+            8,
+            2,
+            0
+          ],
+          "total_hours": 42,
+          "utilization": 100
+        },
+        "Костя": {
+          "daily_hours": [
+            9,
+            10,
+            6,
+            6,
+            9,
+            1,
+            1
+          ],
+          "total_hours": 42,
+          "utilization": 100
+        }
+      }
+    },
+    {
+      "week": "Неделя 3",
+      "start_date": "29.09",
+      "employees": {
+        "Тоня": {
+          "daily_hours": [
+            9,
+            9,
+            6,
+            7,
+            10,
+            3,
+            3
+          ],
+          "total_hours": 47,
+          "utilization": 100
+        },
+        "Лена": {
+          "daily_hours": [
+            8,
+            9,
+            6,
+            10,
+            8,
+            1,
+            3
+          ],
+          "total_hours": 45,
+          "utilization": 100
+        },
+        "Лиза": {
+          "daily_hours": [
+            7,
+            9,
+            9,
+            10,
+            9,
+            2,
+            1
+          ],
+          "total_hours": 47,
+          "utilization": 100
+        },
+        "Костя": {
+          "daily_hours": [
+            8,
+            9,
+            7,
+            9,
+            9,
+            0,
+            0
+          ],
+          "total_hours": 42,
+          "utilization": 100
+        }
+      }
+    },
+    {
+      "week": "Неделя 4",
+      "start_date": "06.10",
+      "employees": {
+        "Тоня": {
+          "daily_hours": [
+            6,
+            10,
+            10,
+            8,
+            9,
+            1,
+            0
+          ],
+          "total_hours": 44,
+          "utilization": 100
+        },
+        "Лена": {
+          "daily_hours": [
+            8,
+            9,
+            8,
+            8,
+            9,
+            1,
+            3
+          ],
+          "total_hours": 46,
+          "utilization": 100
+        },
+        "Лиза": {
+          "daily_hours": [
+            8,
+            7,
+            7,
+            8,
+            6,
+            2,
+            2
+          ],
+          "total_hours": 40,
+          "utilization": 90.0
+        },
+        "Костя": {
+          "daily_hours": [
+            6,
+            8,
+            6,
+            10,
+            8,
+            2,
+            1
+          ],
+          "total_hours": 41,
+          "utilization": 95.0
+        }
+      }
+    }
+  ],
+  "leads_system": {
+    "leads": [
+      {
+        "id": "lead_001",
+        "name": "TechStart Solutions",
+        "contact_person": "Игорь Миронов",
+        "email": "i.mironov@techstart.ru",
+        "phone": "+7 (499) 123-45-67",
+        "source": "Сайт",
+        "stage": "Новый лид",
+        "potential_value": 150000,
+        "probability": 20,
+        "created_date": "2024-10-10",
+        "last_contact": "2024-10-12",
+        "notes": "Интересуются разработкой корпоративного сайта",
+        "manager": "Лена"
+      },
+      {
+        "id": "lead_002",
+        "name": "Beauty Salon Luxe",
+        "contact_person": "Анна Красавина",
+        "email": "info@beautyluxe.com",
+        "phone": "+7 (495) 234-56-78",
+        "source": "Реклама",
+        "stage": "Квалификация",
+        "potential_value": 85000,
+        "probability": 40,
+        "created_date": "2024-10-08",
+        "last_contact": "2024-10-13",
+        "notes": "Нужен сайт + SEO продвижение",
+        "manager": "Тоня"
+      },
+      {
+        "id": "lead_003",
+        "name": "Fitness Club Energy",
+        "contact_person": "Михаил Спортсмен",
+        "email": "m.sport@energy-fit.ru",
+        "phone": "+7 (499) 345-67-89",
+        "source": "Рекомендация",
+        "stage": "Переговоры",
+        "potential_value": 220000,
+        "probability": 70,
+        "created_date": "2024-09-25",
+        "last_contact": "2024-10-11",
+        "notes": "Комплексное решение: сайт, приложение, CRM",
+        "manager": "Костя"
+      },
+      {
+        "id": "lead_004",
+        "name": "Restaurant Chain Vkusno",
+        "contact_person": "Елена Шефпова",
+        "email": "e.chef@vkusno-chain.ru",
+        "phone": "+7 (495) 456-78-90",
+        "source": "Холодный звонок",
+        "stage": "Предложение",
+        "potential_value": 180000,
+        "probability": 60,
+        "created_date": "2024-09-30",
+        "last_contact": "2024-10-09",
+        "notes": "Сеть из 5 ресторанов, единая система заказов",
+        "manager": "Лиза"
+      },
+      {
+        "id": "lead_005",
+        "name": "Medical Center Plus",
+        "contact_person": "Доктор Иванов",
+        "email": "ivanov@medplus.com",
+        "source": "Партнеры",
+        "stage": "Закрытие",
+        "potential_value": 95000,
+        "probability": 90,
+        "created_date": "2024-09-15",
+        "last_contact": "2024-10-13",
+        "notes": "Готовы подписать договор, ждут финальное предложение",
+        "manager": "Лена"
+      }
+    ],
+    "sales_funnel": {
+      "stages": [
+        {
+          "name": "Новый лид",
+          "count": 3,
+          "total_value": 425000,
+          "conversion_rate": 45,
+          "avg_time_days": 7
+        },
+        {
+          "name": "Квалификация",
+          "count": 5,
+          "total_value": 780000,
+          "conversion_rate": 65,
+          "avg_time_days": 14
+        },
+        {
+          "name": "Переговоры",
+          "count": 4,
+          "total_value": 680000,
+          "conversion_rate": 75,
+          "avg_time_days": 21
+        },
+        {
+          "name": "Предложение",
+          "count": 2,
+          "total_value": 275000,
+          "conversion_rate": 80,
+          "avg_time_days": 10
+        },
+        {
+          "name": "Закрытие",
+          "count": 1,
+          "total_value": 95000,
+          "conversion_rate": 85,
+          "avg_time_days": 5
+        }
+      ],
+      "metrics": {
+        "total_pipeline": 2255000,
+        "weighted_pipeline": 1495000,
+        "avg_deal_size": 150000,
+        "conversion_rate_overall": 23,
+        "avg_sales_cycle": 57
+      }
+    }
+  },
+  "notifications": {
+    "notification_center": [
+      {
+        "id": "notif_001",
+        "type": "critical",
+        "title": "Критическая просрочка платежа",
+        "description": "New White Smile не оплачивает счет 45 дней (42,000 руб.)",
+        "timestamp": "2024-10-13 15:30:00",
+        "action_required": true,
+        "action_text": "Отправить напоминание",
+        "related_entity": "client",
+        "entity_id": "client_003",
+        "read": false
+      },
+      {
+        "id": "notif_002",
+        "type": "warning",
+        "title": "Проект близок к дедлайну",
+        "description": "ORDO должен быть завершен через 12 дней",
+        "timestamp": "2024-10-13 14:15:00",
+        "action_required": true,
+        "action_text": "Проверить статус",
+        "related_entity": "project",
+        "entity_id": "proj_003",
+        "read": false
+      },
+      {
+        "id": "notif_003",
+        "type": "info",
+        "title": "Новый лид в системе",
+        "description": "Medical Center Plus готов к закрытию сделки",
+        "timestamp": "2024-10-13 13:45:00",
+        "action_required": true,
+        "action_text": "Связаться",
+        "related_entity": "lead",
+        "entity_id": "lead_005",
+        "read": false
+      },
+      {
+        "id": "notif_004",
+        "type": "success",
+        "title": "Счет оплачен",
+        "description": "FullMoon оплатил счет на 13,000 руб.",
+        "timestamp": "2024-10-13 12:20:00",
+        "action_required": false,
+        "related_entity": "invoice",
+        "entity_id": "inv_003",
+        "read": true
+      },
+      {
+        "id": "notif_005",
+        "type": "warning",
+        "title": "Сотрудник перегружен",
+        "description": "Лена ведет 3 активных проекта одновременно",
+        "timestamp": "2024-10-13 11:00:00",
+        "action_required": true,
+        "action_text": "Перераспределить",
+        "related_entity": "employee",
+        "entity_id": "emp_002",
+        "read": false
+      }
+    ],
+    "alert_settings": {
+      "overdue_payments": {
+        "enabled": true,
+        "threshold_days": 30,
+        "notification_methods": [
+          "email",
+          "dashboard"
+        ],
+        "recipients": [
+          "admin@agency.com",
+          "finance@agency.com"
+        ]
+      },
+      "project_deadlines": {
+        "enabled": true,
+        "threshold_days": 14,
+        "notification_methods": [
+          "dashboard",
+          "telegram"
+        ],
+        "recipients": [
+          "project-managers"
+        ]
+      },
+      "employee_workload": {
+        "enabled": true,
+        "threshold_projects": 3,
+        "notification_methods": [
+          "dashboard"
+        ],
+        "recipients": [
+          "hr@agency.com"
+        ]
+      },
+      "low_cash_flow": {
+        "enabled": true,
+        "threshold_amount": 100000,
+        "notification_methods": [
+          "email",
+          "telegram"
+        ],
+        "recipients": [
+          "admin@agency.com"
+        ]
+      }
+    },
+    "requires_attention": [
+      {
+        "priority": "critical",
+        "category": "payment",
+        "title": "Критическая просрочка",
+        "description": "2 счета просрочены более 30 дней",
+        "action": "Связаться с клиентами",
+        "deadline": "2024-10-14"
+      },
+      {
+        "priority": "high",
+        "category": "project",
+        "title": "Проекты близко к дедлайну",
+        "description": "3 проекта завершаются в течение 2 недель",
+        "action": "Проверить готовность",
+        "deadline": "2024-10-15"
+      },
+      {
+        "priority": "medium",
+        "category": "lead",
+        "title": "Горячие лиды",
+        "description": "2 лида готовы к закрытию",
+        "action": "Финализировать сделки",
+        "deadline": "2024-10-16"
+      },
+      {
+        "priority": "medium",
+        "category": "team",
+        "title": "Дисбаланс нагрузки",
+        "description": "Лена перегружена, Костя недогружен",
+        "action": "Перераспределить задачи",
+        "deadline": "2024-10-17"
+      }
+    ]
+  },
+  "insights": {
+    "active_insights": [
+      {
+        "id": "insight_001",
+        "type": "financial",
+        "priority": "high",
+        "icon": "💰",
+        "title": "Критическая просрочка платежа",
+        "description": "New White Smile не оплачивает счет на 42,000 руб. уже 45 дней. Риск безнадежного долга составляет 65%.",
+        "action": "Отправить финальное напоминание",
+        "action_link": "/finances/receivables",
+        "metric_change": "-45 дней",
+        "confidence": 95,
+        "impact_score": 8.5,
+        "timestamp": "2024-10-13 15:00:00",
+        "auto_generated": true
+      },
+      {
+        "id": "insight_002",
+        "type": "revenue",
+        "priority": "medium",
+        "icon": "📈",
+        "title": "Выручка растет быстрее плана",
+        "description": "Подтвержденная выручка за октябрь составляет 955,650 руб., что на 22.5% выше прошлого месяца и на 18% выше плана.",
+        "action": null,
+        "metric_change": "+22.5%",
+        "confidence": 100,
+        "impact_score": 7.2,
+        "timestamp": "2024-10-13 14:30:00",
+        "auto_generated": true
+      },
+      {
+        "id": "insight_003",
+        "type": "project",
+        "priority": "medium",
+        "icon": "⏰",
+        "title": "Проект готов к выставлению счета",
+        "description": "ORDO выполнен на 80% (167,250 руб.). Рекомендуется выставить промежуточный счет для улучшения кэш-флоу.",
+        "action": "Выставить промежуточный счет",
+        "action_link": "/status",
+        "metric_change": "80%",
+        "confidence": 90,
+        "impact_score": 6.8,
+        "timestamp": "2024-10-13 13:00:00",
+        "auto_generated": true
+      },
+      {
+        "id": "insight_004",
+        "type": "sales",
+        "priority": "high",
+        "icon": "🎯",
+        "title": "Горячие лиды требуют внимания",
+        "description": "Medical Center Plus готов подписать договор на 95,000 руб. (90% вероятность). Требуется срочный контакт.",
+        "action": "Связаться с клиентом",
+        "action_link": "/leads",
+        "metric_change": "90%",
+        "confidence": 88,
+        "impact_score": 7.5,
+        "timestamp": "2024-10-13 12:30:00",
+        "auto_generated": true
+      },
+      {
+        "id": "insight_005",
+        "type": "team",
+        "priority": "medium",
+        "icon": "⚡",
+        "title": "Дисбаланс рабочей нагрузки",
+        "description": "Лена ведет 3 проекта (120% загрузка), Костя - 1 проект (60% загрузка). Рекомендуется перераспределение.",
+        "action": "Перераспределить проекты",
+        "action_link": "/employees",
+        "metric_change": "±60%",
+        "confidence": 85,
+        "impact_score": 6.0,
+        "timestamp": "2024-10-13 11:00:00",
+        "auto_generated": true
+      },
+      {
+        "id": "insight_006",
+        "type": "client",
+        "priority": "low",
+        "icon": "📊",
+        "title": "NPS показывает устойчивый рост",
+        "description": "Net Promoter Score вырос с -15 до 18 за 10 месяцев (+233%). Клиенты становятся более довольными услугами.",
+        "action": "Посмотреть детали NPS",
+        "action_link": "/clients/nps",
+        "metric_change": "+233%",
+        "confidence": 95,
+        "impact_score": 5.5,
+        "timestamp": "2024-10-13 10:00:00",
+        "auto_generated": true
+      }
+    ],
+    "insight_algorithms": {
+      "anomaly_detector": {
+        "threshold": 0.15,
+        "lookback_period": 90,
+        "confidence_min": 0.7
+      },
+      "trend_analyzer": {
+        "min_datapoints": 6,
+        "trend_significance": 0.05,
+        "smoothing_factor": 0.3
+      },
+      "recommendation_engine": {
+        "rules_count": 47,
+        "update_frequency": 300,
+        "priority_weights": {
+          "financial_impact": 0.4,
+          "urgency": 0.3,
+          "confidence": 0.3
+        }
+      }
+    }
+  },
+  "ui_improvements": {
+    "button_styles": {
+      "edit_button": {
+        "icon": "✏️",
+        "opacity": "0.7",
+        "hover_opacity": "1.0",
+        "background": "rgba(255, 140, 0, 0.2)"
+      },
+      "delete_button": {
+        "icon": "🗑️",
+        "opacity": "0.7",
+        "hover_opacity": "1.0",
+        "background": "rgba(239, 68, 68, 0.2)"
+      }
+    },
+    "spacing_fixes": {
+      "header_to_content": "24px",
+      "section_padding": "20px",
+      "card_margin": "16px"
+    },
+    "removed_buttons": {
+      "ltv_section": false,
+      "nps_section": false
+    }
+  }
+}
