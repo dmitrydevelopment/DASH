@@ -340,6 +340,54 @@ INSERT INTO `crm_employee_roles` (`id`, `role_name`, `role_tag`, `sort_order`, `
 -- --------------------------------------------------------
 
 --
+-- Структура таблицы `crm_work_categories`
+--
+
+DROP TABLE IF EXISTS `crm_work_categories`;
+CREATE TABLE `crm_work_categories` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `tag` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sort_order` int(11) NOT NULL DEFAULT '0',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Структура таблицы `finance_planned_invoices`
+--
+
+DROP TABLE IF EXISTS `finance_planned_invoices`;
+CREATE TABLE `finance_planned_invoices` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `client_id` int(10) UNSIGNED NOT NULL,
+  `period_year` smallint(5) UNSIGNED NOT NULL,
+  `period_month` tinyint(3) UNSIGNED NOT NULL,
+  `planned_send_date` date DEFAULT NULL,
+  `status` enum('planned','sent_waiting_payment','paid','archived') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'planned',
+  `work_items_json` longtext COLLATE utf8mb4_unicode_ci NOT NULL,
+  `categories_json` longtext COLLATE utf8mb4_unicode_ci,
+  `total_sum` decimal(12,2) NOT NULL DEFAULT '0.00',
+  `sent_at` datetime DEFAULT NULL,
+  `due_date` date DEFAULT NULL,
+  `payment_status_cached` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `payment_date_cached` datetime DEFAULT NULL,
+  `days_overdue_cached` int(11) NOT NULL DEFAULT '0',
+  `is_overdue_cached` tinyint(1) NOT NULL DEFAULT '0',
+  `linked_document_id` int(10) UNSIGNED DEFAULT NULL,
+  `last_reminded_at` datetime DEFAULT NULL,
+  `created_by_user_id` int(10) UNSIGNED DEFAULT NULL,
+  `notes` text COLLATE utf8mb4_unicode_ci,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Структура таблицы `crm_settings`
 --
 -- Создание: Фев 08 2026 г., 17:20
@@ -374,6 +422,8 @@ CREATE TABLE `crm_settings` (
   `finance_email_bcc` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finance_telegram_bot_token` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `telegram_default_message_invoice` mediumtext COLLATE utf8mb4_unicode_ci,
+  `finance_email_body_invoice_reminder_html` mediumtext COLLATE utf8mb4_unicode_ci,
+  `telegram_default_message_invoice_reminder` mediumtext COLLATE utf8mb4_unicode_ci,
   `finance_diadoc_api_client_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finance_diadoc_login` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finance_diadoc_password` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
@@ -722,6 +772,26 @@ ALTER TABLE `crm_employee_roles`
 --
 -- Индексы таблицы `crm_settings`
 --
+ALTER TABLE `crm_work_categories`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_work_category_tag` (`tag`),
+  ADD KEY `idx_work_category_sort` (`sort_order`),
+  ADD KEY `idx_work_category_active` (`is_active`);
+
+--
+-- Индексы таблицы `finance_planned_invoices`
+--
+ALTER TABLE `finance_planned_invoices`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_fpi_client_period` (`client_id`,`period_year`,`period_month`),
+  ADD KEY `idx_fpi_client_period` (`client_id`,`period_year`,`period_month`),
+  ADD KEY `idx_fpi_status` (`status`),
+  ADD KEY `idx_fpi_planned_send_date` (`planned_send_date`),
+  ADD KEY `idx_fpi_linked_document` (`linked_document_id`);
+
+--
+-- Индексы таблицы `crm_settings`
+--
 ALTER TABLE `crm_settings`
   ADD PRIMARY KEY (`id`);
 
@@ -825,6 +895,12 @@ ALTER TABLE `crm_employee_roles`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=66;
 
 --
+-- AUTO_INCREMENT для таблицы `crm_work_categories`
+--
+ALTER TABLE `crm_work_categories`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT для таблицы `employees`
 --
 ALTER TABLE `employees`
@@ -841,6 +917,12 @@ ALTER TABLE `employee_salary_history`
 --
 ALTER TABLE `employee_schedule`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=113;
+
+--
+-- AUTO_INCREMENT для таблицы `finance_bank_operations`
+--
+ALTER TABLE `finance_planned_invoices`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT для таблицы `finance_bank_operations`
@@ -899,6 +981,13 @@ ALTER TABLE `employee_salary_history`
 --
 ALTER TABLE `employee_schedule`
   ADD CONSTRAINT `fk_employee_schedule_employee` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Ограничения внешнего ключа таблицы `finance_planned_invoices`
+--
+ALTER TABLE `finance_planned_invoices`
+  ADD CONSTRAINT `fk_fpi_client` FOREIGN KEY (`client_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_fpi_document` FOREIGN KEY (`linked_document_id`) REFERENCES `finance_documents` (`id`) ON DELETE SET NULL;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

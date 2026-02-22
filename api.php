@@ -20,6 +20,7 @@ require_once APP_BASE_PATH . '/app/controllers/ClientController.php';
 require_once APP_BASE_PATH . '/app/controllers/DadataController.php';
 require_once APP_BASE_PATH . '/app/controllers/SettingsController.php';
 require_once APP_BASE_PATH . '/app/controllers/FinanceController.php';
+require_once APP_BASE_PATH . '/app/controllers/KanbanController.php';
 
 /**
  * Унифицированное получение тела запроса как массива.
@@ -204,6 +205,79 @@ if ($resource === 'auth') {
 
     sendError('NOT_FOUND', 'Маршрут не найден', 404);
 
+
+} elseif ($resource === 'work-categories') {
+
+    $controller = new KanbanController($db);
+
+    if ($param1 === null) {
+        if ($method === 'GET') {
+            $controller->listCategories();
+        } elseif ($method === 'POST') {
+            $controller->createCategory();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    if ($param1 !== null && ctype_digit($param1) && $param2 === null) {
+        $id = (int) $param1;
+        if ($method === 'POST' || $method === 'PUT' || $method === 'PATCH') {
+            $controller->updateCategory($id);
+        } elseif ($method === 'DELETE') {
+            $controller->deleteCategory($id);
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    sendError('NOT_FOUND', 'Маршрут не найден', 404);
+
+} elseif ($resource === 'planned-invoices') {
+
+    $controller = new KanbanController($db);
+
+    if ($param1 === null) {
+        if ($method === 'GET') {
+            $controller->listPlannedInvoices();
+        } elseif ($method === 'POST') {
+            $controller->createPlannedInvoice();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    if ($param1 !== null && ctype_digit($param1) && $param2 === null) {
+        $id = (int) $param1;
+        if ($method === 'POST' || $method === 'PUT' || $method === 'PATCH') {
+            $controller->updatePlannedInvoice($id);
+        } elseif ($method === 'DELETE') {
+            $controller->archivePlannedInvoice($id);
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    if ($param1 !== null && ctype_digit($param1) && $param2 === 'remind') {
+        $id = (int) $param1;
+        if ($method === 'POST') {
+            $controller->remindPlannedInvoice($id);
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    if ($param1 !== null && ctype_digit($param1) && $param2 === 'send') {
+        $id = (int) $param1;
+        if ($method === 'POST') {
+            $controller->sendPlannedInvoice($id);
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    sendError('NOT_FOUND', 'Маршрут не найден', 404);
+
 } elseif ($resource === 'finance') {
 
     $controller = new FinanceController($db);
@@ -216,6 +290,11 @@ if ($resource === 'auth') {
     // /api.php/finance/email-open?token=...
     if ($method === 'GET' && $param1 === 'email-open') {
         $controller->emailOpen();
+    }
+
+    // /api.php/finance/documents
+    if ($method === 'GET' && $param1 === 'documents') {
+        $controller->documents();
     }
 
     sendError('NOT_FOUND', 'Маршрут не найден', 404);

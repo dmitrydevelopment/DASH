@@ -255,7 +255,7 @@ $stmt->bind_param(
 
 public function delete(int $id): bool
 {
-    $stmt = $this->db->prepare("DELETE FROM clients WHERE id = ?");
+    $stmt = $this->db->prepare("UPDATE clients SET is_active = 0 WHERE id = ?");
     if (!$stmt) {
         return false;
     }

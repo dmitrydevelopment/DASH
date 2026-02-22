@@ -129,6 +129,8 @@ class SettingsModel
 
             'finance_telegram_bot_token' => (string) $this->col($row, $cols, 'finance_telegram_bot_token', ''),
             'telegram_default_message_invoice' => (string) $this->col($row, $cols, 'telegram_default_message_invoice', ''),
+            'finance_email_body_invoice_reminder_html' => (string) $this->col($row, $cols, 'finance_email_body_invoice_reminder_html', ''),
+            'telegram_default_message_invoice_reminder' => (string) $this->col($row, $cols, 'telegram_default_message_invoice_reminder', ''),
 
             'finance_diadoc_api_client_id' => (string) $this->col($row, $cols, 'finance_diadoc_api_client_id', ''),
             'finance_diadoc_login' => (string) $this->col($row, $cols, 'finance_diadoc_login', ''),
@@ -177,6 +179,8 @@ class SettingsModel
 
             'finance_telegram_bot_token' => ['col' => 'finance_telegram_bot_token', 'type' => 's'],
             'telegram_default_message_invoice' => ['col' => 'telegram_default_message_invoice', 'type' => 's'],
+            'finance_email_body_invoice_reminder_html' => ['col' => 'finance_email_body_invoice_reminder_html', 'type' => 's'],
+            'telegram_default_message_invoice_reminder' => ['col' => 'telegram_default_message_invoice_reminder', 'type' => 's'],
 
             'finance_diadoc_api_client_id' => ['col' => 'finance_diadoc_api_client_id', 'type' => 's'],
             'finance_diadoc_login' => ['col' => 'finance_diadoc_login', 'type' => 's'],
@@ -264,6 +268,33 @@ class SettingsModel
                     'role_name' => (string) $row['role_name'],
                     'role_tag' => (string) $row['role_tag'],
                     'sort_order' => (int) $row['sort_order'],
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+
+    public function getWorkCategories(bool $includeInactive = true): array
+    {
+        $sql = "SELECT id, name, tag, sort_order, is_active FROM crm_work_categories";
+        if (!$includeInactive) {
+            $sql .= " WHERE is_active = 1";
+        }
+        $sql .= " ORDER BY sort_order ASC, id ASC";
+
+        $res = $this->db->query($sql);
+
+        $out = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $out[] = [
+                    'id' => (int) $row['id'],
+                    'name' => (string) $row['name'],
+                    'tag' => (string) $row['tag'],
+                    'sort_order' => (int) $row['sort_order'],
+                    'is_active' => (int) $row['is_active'],
                 ];
             }
         }

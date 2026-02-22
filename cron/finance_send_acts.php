@@ -80,10 +80,10 @@ $docs = new FinanceDocumentModel($db);
 $events = new FinanceSendEventModel($db);
 
 $clientSql = "SELECT id, name, legal_name, inn, kpp, email, additional_email, telegram_id, chat_id,
-                    send_act_schedule, send_act_telegram, send_act_diadoc
+                    send_invoice_schedule, send_invoice_telegram, send_act_diadoc
              FROM clients
-             WHERE is_deleted = 0
-               AND send_act_schedule = 1";
+             WHERE is_active = 1
+               AND send_invoice_schedule = 1";
 
 $res = $db->query($clientSql);
 $clients = [];
@@ -265,7 +265,7 @@ foreach ($clients as $c) {
     }
 
     // Telegram (если включено и заполнен tg id).
-    $sendTg = !empty($c['send_act_telegram']);
+    $sendTg = !empty($c['send_invoice_telegram']);
     $tgChat = '';
     if (!empty($c['chat_id'])) $tgChat = trim((string) $c['chat_id']);
     if ($tgChat === '' && !empty($c['telegram_id'])) $tgChat = trim((string) $c['telegram_id']);

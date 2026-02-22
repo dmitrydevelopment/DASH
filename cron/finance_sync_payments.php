@@ -92,10 +92,10 @@ function loadCursor(mysqli $db)
 {
     if (!tableExists($db, 'finance_sync_state')) return '';
 
-    $res = $db->query("SELECT last_cursor FROM finance_sync_state WHERE id = 1 LIMIT 1");
+    $res = $db->query("SELECT tbank_cursor FROM finance_sync_state WHERE id = 1 LIMIT 1");
     if ($res && $row = $res->fetch_assoc()) {
         $res->close();
-        return (string) $row['last_cursor'];
+        return (string) $row['tbank_cursor'];
     }
     if ($res) $res->close();
     return '';
@@ -113,12 +113,12 @@ function saveCursor(mysqli $db, $cursor)
     if ($res) $res->close();
 
     if ($exists) {
-        $stmt = $db->prepare("UPDATE finance_sync_state SET last_cursor = ?, updated_at = ? WHERE id = 1");
+        $stmt = $db->prepare("UPDATE finance_sync_state SET tbank_cursor = ?, last_run_at = ? WHERE id = 1");
         $stmt->bind_param("ss", $cursor, $now);
         $stmt->execute();
         $stmt->close();
     } else {
-        $stmt = $db->prepare("INSERT INTO finance_sync_state (id, last_cursor, updated_at) VALUES (1, ?, ?)");
+        $stmt = $db->prepare("INSERT INTO finance_sync_state (id, tbank_cursor, last_run_at) VALUES (1, ?, ?)");
         $stmt->bind_param("ss", $cursor, $now);
         $stmt->execute();
         $stmt->close();
@@ -150,7 +150,7 @@ function saveOperation(mysqli $db, array $op)
     $purpose = '';
     if (isset($op['paymentPurpose'])) $purpose = (string) $op['paymentPurpose'];
 
-    $stmt = $db->prepare("INSERT IGNORE INTO finance_bank_operations (operation_id, occurred_at, amount, currency, purpose, raw_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $stmt = $db->prepare("INSERT IGNORE INTO finance_bank_operations (operation_id, operation_time, amount, currency, description, raw_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
     $createdAt = date('Y-m-d H:i:s');
     $stmt->bind_param("ssdssss", $operationId, $occurredAt, $amount, $currency, $purpose, $json, $createdAt);
     $stmt->execute();
@@ -172,7 +172,7 @@ function tryMatchPaymentToInvoice(mysqli $db, FinanceDocumentModel $docs, array 
 
     // Находим кандидатов: последние 6 месяцев, только invoice.
     // Упрощенно: ищем doc_number как подстроку в purpose.
-    $stmt = $db->prepare("SELECT id, doc_number, total_sum FROM finance_documents WHERE doc_type = 'invoice' AND (paid_status IS NULL OR paid_status <> 'paid') ORDER BY id DESC LIMIT 200");
+    $stmt = $db->prepare("SELECT id, doc_number, total_sum FROM finance_documents WHERE doc_type = 'invoice' AND is_paid = 0 ORDER BY id DESC LIMIT 200");
     $stmt->execute();
     $res = $stmt->get_result();
 
@@ -185,7 +185,7 @@ function tryMatchPaymentToInvoice(mysqli $db, FinanceDocumentModel $docs, array 
             $paidAt = isset($op['operationDate']) ? (string) $op['operationDate'] : date('Y-m-d H:i:s');
 
             $docs->updateById($docId, [
-                'paid_status' => 'paid',
+                'is_paid' => 1,
                 'paid_at' => $paidAt,
                 'paid_sum' => $amount,
             ]);

@@ -27,6 +27,10 @@
                     <span class="nav-icon">💰</span>
                     <span class="nav-text">Финансы</span>
                 </li>
+                <li class="nav-item" data-tab="invoices">
+                    <span class="nav-icon">🧾</span>
+                    <span class="nav-text">Счета</span>
+                </li>
                 <li class="nav-item" data-tab="employees">
                     <span class="nav-icon">👥</span>
                     <span class="nav-text">Сотрудники</span>
@@ -117,18 +121,6 @@
                 </div>
 
                 <!-- Key Metrics -->
-                <!-- Period Selector -->
-                <div class="period-selector">
-                    <label for="periodSelect">Период анализа:</label>
-                    <select id="periodSelect" class="period-select">
-                        <option value="current-month" selected>Текущий месяц</option>
-                        <option value="last-month">Прошлый месяц</option>
-                        <option value="quarter">Квартал</option>
-                        <option value="half-year">Полгода</option>
-                        <option value="year">Год</option>
-                    </select>
-                </div>
-
                 <div class="metrics-grid">
                     <div class="metric-card nearest-payments">
                         <div class="metric-icon">⏰</div>
@@ -251,6 +243,17 @@
                 <div class="tab-header">
                     <h1>Финансовая аналитика</h1>
                     <p class="tab-subtitle">Детальный анализ доходов и расходов</p>
+                </div>
+
+                <div class="period-selector">
+                    <label for="financePeriodSelect">Период анализа:</label>
+                    <select id="financePeriodSelect" class="period-select">
+                        <option value="current-month" selected>Текущий месяц</option>
+                        <option value="last-month">Прошлый месяц</option>
+                        <option value="quarter">Квартал</option>
+                        <option value="half-year">Полгода</option>
+                        <option value="year">Год</option>
+                    </select>
                 </div>
 
                 <!-- Interactive Revenue Charts -->
@@ -604,6 +607,26 @@
                     </div>
                 </div>
                 </div>
+            </div>
+
+            <!-- Invoices Tab -->
+            <div class="tab-content" id="invoices">
+                <div class="tab-header">
+                    <h1>Счета и акты</h1>
+                    <p class="tab-subtitle">Поиск и скачивание документов по периодам</p>
+                </div>
+                <div class="filters-panel" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+                    <select id="invoicesDocType">
+                        <option value="">Все документы</option>
+                        <option value="invoice">Счета</option>
+                        <option value="act">Акты</option>
+                    </select>
+                    <input type="number" id="invoicesClientId" placeholder="ID клиента" min="1" />
+                    <input type="number" id="invoicesPeriodYear" placeholder="Год" min="2000" max="2100" />
+                    <input type="number" id="invoicesPeriodMonth" placeholder="Месяц" min="1" max="12" />
+                    <button class="btn btn--primary" onclick="initInvoicesTab(1)">Найти</button>
+                </div>
+                <div id="invoicesList"></div>
             </div>
 
             <!-- Employees Tab -->
@@ -1726,6 +1749,8 @@
     <!-- Toast Notifications -->
     <div id="toast-container"></div>
 
-    <script src="app.js"></script>
+    <script src="public_html/js/01-core-data.js"></script>
+    <script src="public_html/js/02-business-modules.js"></script>
+    <script src="public_html/js/03-settings-forms.js"></script>
 </body>
 </html>

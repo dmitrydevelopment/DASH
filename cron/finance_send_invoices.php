@@ -8,6 +8,7 @@ $db = require __DIR__ . '/../app/bootstrap.php';
 require_once APP_BASE_PATH . '/app/models/SettingsModel.php';
 require_once APP_BASE_PATH . '/app/models/FinanceDocumentModel.php';
 require_once APP_BASE_PATH . '/app/models/FinanceSendEventModel.php';
+require_once APP_BASE_PATH . '/app/models/PlannedInvoiceModel.php';
 
 require_once APP_BASE_PATH . '/app/services/FinanceCalendarService.php';
 require_once APP_BASE_PATH . '/app/services/FinanceFileStorage.php';
@@ -83,11 +84,12 @@ $tgSvc = new TelegramService($tgBotToken);
 
 $docs = new FinanceDocumentModel($db);
 $events = new FinanceSendEventModel($db);
+$plannedModel = new PlannedInvoiceModel($db);
 
 $clientSql = "SELECT id, name, legal_name, inn, kpp, email, additional_email, telegram_id, chat_id,
                     send_invoice_schedule, invoice_use_end_month_date, send_invoice_telegram, send_invoice_diadoc
              FROM clients
-             WHERE is_deleted = 0
+             WHERE is_active = 1
                AND send_invoice_schedule = 1
                AND COALESCE(invoice_use_end_month_date, 0) = ?";
 
@@ -219,6 +221,39 @@ foreach ($clients as $c) {
         echo "DOC_CREATED client_id={$clientId} doc_id={$docId}\n";
     } else {
         echo "DOC_EXISTS client_id={$clientId} doc_id={$doc['id']}\n";
+    }
+
+    $plannedRow = $plannedModel->findByClientPeriod($clientId, $year, $month);
+    if (!$plannedRow) {
+        $plannedModel->create([
+            'client_id' => $clientId,
+            'period_year' => $year,
+            'period_month' => $month,
+            'planned_send_date' => $today,
+            'status' => 'sent_waiting_payment',
+            'work_items_json' => json_encode([], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'categories_json' => json_encode([], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'total_sum' => isset($doc['total_sum']) ? (float) $doc['total_sum'] : 0,
+            'sent_at' => date('Y-m-d H:i:s'),
+            'due_date' => (string) ($doc['due_date'] ?? null),
+            'payment_status_cached' => !empty($doc['is_paid']) ? 'paid' : 'unpaid',
+            'payment_date_cached' => !empty($doc['paid_at']) ? (string) $doc['paid_at'] : null,
+            'days_overdue_cached' => 0,
+            'is_overdue_cached' => 0,
+            'linked_document_id' => (int) $doc['id'],
+            'created_by_user_id' => 0,
+            'notes' => '',
+        ]);
+    } else {
+        $plannedModel->update((int) $plannedRow['id'], [
+            'status' => !empty($doc['is_paid']) ? 'paid' : 'sent_waiting_payment',
+            'linked_document_id' => (int) $doc['id'],
+            'sent_at' => date('Y-m-d H:i:s'),
+            'due_date' => (string) ($doc['due_date'] ?? null),
+            'payment_status_cached' => !empty($doc['is_paid']) ? 'paid' : 'unpaid',
+            'payment_date_cached' => !empty($doc['paid_at']) ? (string) $doc['paid_at'] : null,
+            'total_sum' => isset($doc['total_sum']) ? (float) $doc['total_sum'] : 0,
+        ]);
     }
 
     $docId = (int) $doc['id'];

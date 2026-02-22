@@ -26,12 +26,14 @@ class SettingsController
         }
 
         $roles = $this->settings->getRoles();
+        $workCategories = $this->settings->getWorkCategories(true);
 
         sendJson([
             'success' => true,
             'data' => [
                 'settings' => $settings,
-                'roles' => $roles
+                'roles' => $roles,
+                'work_categories' => $workCategories
             ]
         ]);
     }
@@ -116,6 +118,8 @@ class SettingsController
 
             'finance_telegram_bot_token' => (string) ($payload['finance_telegram_bot_token'] ?? ''),
             'telegram_default_message_invoice' => (string) ($payload['telegram_default_message_invoice'] ?? ''),
+            'finance_email_body_invoice_reminder_html' => (string) ($payload['finance_email_body_invoice_reminder_html'] ?? ''),
+            'telegram_default_message_invoice_reminder' => (string) ($payload['telegram_default_message_invoice_reminder'] ?? ''),
 
             'finance_diadoc_api_client_id' => (string) ($payload['finance_diadoc_api_client_id'] ?? ''),
             'finance_diadoc_login' => (string) ($payload['finance_diadoc_login'] ?? ''),
@@ -144,7 +148,8 @@ class SettingsController
             'success' => true,
             'data' => [
                 'settings' => $settings,
-                'roles' => $this->settings->getRoles()
+                'roles' => $this->settings->getRoles(),
+                'work_categories' => $this->settings->getWorkCategories(true)
             ]
         ]);
     }
