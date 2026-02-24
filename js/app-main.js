@@ -906,7 +906,7 @@ function renderInvoicePlanModalMeta(mode, plan) {
     if (projectStatusWrap) projectStatusWrap.style.display = '';
     if (projectStatus) projectStatus.value = String(plan?.status || 'in_progress');
   } else if (mode === 'project_invoice') {
-    if (title) title.textContent = 'Редактировать проект';
+    if (title) title.textContent = 'Выставить счет';
     if (titleWrap) titleWrap.style.display = '';
     if (searchWrap) searchWrap.style.display = 'none';
     if (titleEl) titleEl.textContent = plan?.client_name || '—';
