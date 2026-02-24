@@ -308,7 +308,12 @@ class FinanceController
             $this->plans->insertSendEvent($documentId, 'diadoc', (string)($plan['diadoc_box_id'] ?? ''), 'skipped', 'Diadoc disabled');
         }
 
-        sendJson(['ok' => true, 'document_id' => $documentId]);
+        sendJson([
+            'ok' => true,
+            'plan_id' => $id,
+            'status' => 'sent_waiting_payment',
+            'document_id' => $documentId
+        ]);
     }
 
     public function invoicePlansRemind($id)

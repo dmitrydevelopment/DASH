@@ -582,6 +582,8 @@ function bindInvoicePlanModalActions() {
       send_now: !!document.getElementById('invoicePlanSendNow')?.checked
     };
 
+    let createdPlanId = 0;
+
     try {
       if (mode === 'create') {
         const clientId = Number(invoicePlanState.selectedClientId || 0);
@@ -596,6 +598,8 @@ function bindInvoicePlanModalActions() {
           body: JSON.stringify({ ...payload, client_id: clientId })
         });
         if (!createResp.ok) throw new Error('create failed');
+        const createData = await createResp.json().catch(() => null);
+        createdPlanId = Number(createData?.plan_id || createData?.id || 0);
         showToast(payload.send_now ? 'Счет выставлен' : 'Карточка добавлена', 'success');
       } else if (mode === 'edit') {
         if (!planId) return;
@@ -631,6 +635,14 @@ function bindInvoicePlanModalActions() {
       }
       close();
       await loadInvoicePlans();
+
+      if (mode === 'create' && payload.send_now && createdPlanId > 0) {
+        const hasCreatedCard = invoicePlanState.items.some((item) => Number(item.id) === createdPlanId);
+        if (!hasCreatedCard) {
+          await new Promise((resolve) => setTimeout(resolve, 700));
+          await loadInvoicePlans();
+        }
+      }
     } catch (err) {
       console.error(err);
       showToast('Не удалось сохранить карточку', 'error');
