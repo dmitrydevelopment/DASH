@@ -253,6 +253,15 @@ if ($resource === 'auth') {
         }
     }
 
+    // /api.php/finance/invoice-plans/send-end-month-now
+    if ($param1 === 'invoice-plans' && $param2 === 'send-end-month-now') {
+        if ($method === 'POST') {
+            $controller->invoicePlansSendEndMonthNow();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
     // /api.php/finance/invoice-plans/{id}
     if ($param1 === 'invoice-plans' && $param2 !== null && ctype_digit($param2)) {
         $id = (int)$param2;
@@ -265,6 +274,41 @@ if ($resource === 'auth') {
             $controller->invoicePlansSend($id);
         } elseif ($method === 'POST' && isset($segments[3]) && $segments[3] === 'remind') {
             $controller->invoicePlansRemind($id);
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/finance/status-board
+    if ($param1 === 'status-board' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->statusBoard();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/finance/projects
+    if ($param1 === 'projects' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->projectsIndex();
+        } elseif ($method === 'POST') {
+            $controller->projectsCreate();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/finance/projects/{id}
+    if ($param1 === 'projects' && $param2 !== null && ctype_digit($param2)) {
+        $id = (int)$param2;
+
+        if ($method === 'PATCH' || $method === 'PUT') {
+            $controller->projectsUpdate($id);
+        } elseif ($method === 'POST' && isset($segments[3]) && $segments[3] === 'ready') {
+            $controller->projectsSetReady($id);
+        } elseif ($method === 'POST' && isset($segments[3]) && $segments[3] === 'invoice') {
+            $controller->projectsSendInvoice($id);
         } else {
             sendError('NOT_FOUND', 'Маршрут не найден', 404);
         }

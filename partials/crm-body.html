@@ -104,18 +104,6 @@
                 </div>
 
                 <!-- Key Metrics -->
-                <!-- Period Selector -->
-                <div class="period-selector">
-                    <label for="periodSelect">Период анализа:</label>
-                    <select id="periodSelect" class="period-select">
-                        <option value="current-month" selected>Текущий месяц</option>
-                        <option value="last-month">Прошлый месяц</option>
-                        <option value="quarter">Квартал</option>
-                        <option value="half-year">Полгода</option>
-                        <option value="year">Год</option>
-                    </select>
-                </div>
-
                 <div class="metrics-grid">
                     <div class="metric-card nearest-payments">
                         <div class="metric-icon">⏰</div>
@@ -157,54 +145,40 @@
                             <div class="metric-change info">За последние 6 месяцев</div>
                         </div>
                     </div>
-                    <div class="metric-card projects">
-                        <div class="metric-icon">📋</div>
-                        <div class="metric-content">
-                            <h3>Активные проекты</h3>
-                            <div class="metric-value" id="activeProjectsValue">35</div>
-                            <div class="metric-change neutral">По всем категориям</div>
-                        </div>
-                    </div>
-
-                </div>
-
-                <!-- Revenue Chart -->
-                <div class="chart-section">
-                    <div class="chart-card">
-                        <div class="chart-header">
-                            <h3>Динамика доходов</h3>
-                            <div class="chart-controls">
-                                <select class="chart-period">
-                                    <option value="month">Месяц</option>
-                                    <option value="quarter">Квартал</option>
-                                    <option value="year">Год</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="revenueChart"></canvas>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Kanban Board -->
                 <div class="kanban-section">
-                    <h3>Канбан счетов</h3>
+                    <h3>Статус счетов и проектов</h3>
                     <div class="kanban-board kanban-board--compact">
-                        <div class="kanban-column" data-status="planned">
+                        <div class="kanban-column" data-status="projects_in_work">
                             <div class="column-header in-progress">
-                                <h4>К выставлению</h4>
-                                <button type="button" class="action-btn action-btn--edit kanban-add-btn" id="kanbanAddPlannedBtn" title="Добавить счет">Добавить</button>
-                                <span class="count" id="kanban-planned-count">0</span>
+                                <h4>Проекты в работе</h4>
+                                <button type="button" class="action-btn action-btn--edit kanban-add-btn" id="kanbanAddProjectBtn" title="Добавить проект">Добавить</button>
+                                <span class="count" id="kanban-projects-count">0</span>
                             </div>
-                            <div class="kanban-cards" id="kanban-planned"></div>
+                            <div class="kanban-cards" id="kanban-projects"></div>
+                        </div>
+                        <div class="kanban-column" data-status="end_month">
+                            <div class="column-header month-end">
+                                <h4>Конец месяца</h4>
+                                <button type="button" class="action-btn action-btn--edit kanban-add-btn" id="kanbanEndMonthSendNowBtn" title="Массовая отправка">Отправить сейчас</button>
+                                <span class="count" id="kanban-end-month-count">0</span>
+                                <span class="amount" id="kanban-end-month-date">—</span>
+                            </div>
+                            <div class="kanban-cards" id="kanban-end-month"></div>
                         </div>
                         <div class="kanban-column" data-status="sent_waiting_payment">
                             <div class="column-header payment">
                                 <h4>Выставлено, ожидание оплаты</h4>
                                 <span class="count" id="kanban-waiting-count">0</span>
                             </div>
-                            <div class="kanban-cards" id="kanban-waiting"></div>
+                            <div class="kanban-cards-group">
+                                <div class="kanban-subtitle">Последние неоплаченные</div>
+                                <div class="kanban-cards" id="kanban-waiting-recent"></div>
+                                <div class="kanban-subtitle">Просроченные</div>
+                                <div class="kanban-cards" id="kanban-waiting-overdue"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -274,10 +248,18 @@
                     <p class="tab-subtitle">Детальный анализ доходов и расходов</p>
                 </div>
 
-                <!-- Interactive Revenue Charts -->
+                <!-- Finance Subcategory Navigation -->
+                <div class="finance-subcategories">
+                    <button type="button" class="subcategory-btn active" data-subcategory="overview">Обзор</button>
+                    <button type="button" class="subcategory-btn" data-subcategory="payments-history">История оплат</button>
+                    <button type="button" class="subcategory-btn" data-subcategory="receivables">Задолженности</button>
+                    <button type="button" class="subcategory-btn" data-subcategory="acts">Акты</button>
+                </div>
+
+                <!-- Revenue Trends -->
                 <div class="revenue-trends-section">
                     <div class="section-header">
-                        <h3>Интерактивная диаграмма выручки</h3>
+                        <h3>Динамика доходов</h3>
                         <div class="chart-controls">
                             <select class="chart-period" id="revenueTrendsPeriod">
                                 <option value="12_months" selected>12 месяцев</option>
@@ -298,18 +280,7 @@
                             <div class="metric-label">Год к году</div>
                             <div class="metric-value positive">+18.7%</div>
                         </div>
-                        <div class="metric-card">
-                            <div class="metric-label">Среднемесячный рост</div>
-                            <div class="metric-value positive">+8.3%</div>
-                        </div>
                     </div>
-                </div>
-
-                <!-- Finance Subcategory Navigation -->
-                <div class="finance-subcategories">
-                    <button type="button" class="subcategory-btn active" data-subcategory="overview">Обзор</button>
-                    <button type="button" class="subcategory-btn" data-subcategory="payments-history">История оплат</button>
-                    <button type="button" class="subcategory-btn" data-subcategory="receivables">Задолженность</button>
                 </div>
 
                 <!-- Finance Subcategory Content -->
@@ -392,29 +363,6 @@
                     </div>
                 </div>
 
-                    <!-- Detailed Revenue Table -->
-                    <div class="revenue-table-section">
-                        <div class="table-header">
-                            <h3>Детализация доходов</h3>
-                            <div class="table-filters">
-                                <select class="filter-category">
-                                    <option value="all">Все категории</option>
-                                    <option value="Разработка">Разработка</option>
-                                    <option value="SEO">SEO</option>
-                                    <option value="Поддержка">Поддержка</option>
-                                    <option value="Боты">Боты</option>
-                                </select>
-                                <select class="filter-status">
-                                    <option value="all">Все статусы</option>
-                                    <option value="В работе">В работе</option>
-                                    <option value="Выставить счет">Выставить счет</option>
-                                    <option value="Конец месяца">Конец месяца</option>
-                                    <option value="Ожидание оплаты">Ожидание оплаты</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="revenue-table" id="revenueTable"></div>
-                    </div>
                 </div>
 
                 <!-- Payments History Subcategory -->
@@ -622,6 +570,15 @@
                                 </table>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div class="subcategory-content" id="finance-acts">
+                    <div class="payments-history-section">
+                        <div class="history-controls">
+                            <h3>Акты</h3>
+                        </div>
+                        <div id="financeActsTable"></div>
                     </div>
                 </div>
                 </div>

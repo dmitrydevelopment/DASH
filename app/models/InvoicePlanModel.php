@@ -13,6 +13,7 @@ class InvoicePlanModel
     public function all()
     {
         $sql = "SELECT ip.*, c.name AS client_name, c.email, c.chat_id, c.diadoc_box_id, c.send_invoice_telegram, c.send_invoice_diadoc,
+                       c.send_invoice_schedule, c.invoice_use_end_month_date,
                        fd_inv.file_rel_path AS invoice_file_rel_path,
                        fd_inv.download_token AS invoice_download_token,
                        (
@@ -51,7 +52,8 @@ class InvoicePlanModel
 
     public function find($id)
     {
-        $stmt = $this->db->prepare("SELECT ip.*, c.name AS client_name, c.email, c.chat_id, c.diadoc_box_id, c.send_invoice_telegram, c.send_invoice_diadoc
+        $stmt = $this->db->prepare("SELECT ip.*, c.name AS client_name, c.email, c.chat_id, c.diadoc_box_id, c.send_invoice_telegram, c.send_invoice_diadoc,
+                                           c.send_invoice_schedule, c.invoice_use_end_month_date
                                     FROM invoice_plans ip
                                     INNER JOIN clients c ON c.id = ip.client_id
                                     WHERE ip.id = ? LIMIT 1");
@@ -194,5 +196,48 @@ class InvoicePlanModel
     public function fallbackBoardRows()
     {
         return [];
+    }
+
+    public function getClientInvoiceSums(array $clientIds)
+    {
+        $ids = array_values(array_unique(array_map('intval', $clientIds)));
+        $ids = array_values(array_filter($ids, function ($id) {
+            return $id > 0;
+        }));
+        if (empty($ids)) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $types = str_repeat('i', count($ids));
+
+        $sql = "SELECT client_id, SUM(service_price) AS total
+                FROM client_invoice_items
+                WHERE client_id IN ($placeholders)
+                GROUP BY client_id";
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            return [];
+        }
+
+        $params = [];
+        $params[] = &$types;
+        foreach ($ids as $k => $id) {
+            $params[] = &$ids[$k];
+        }
+        call_user_func_array([$stmt, 'bind_param'], $params);
+
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $map = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $map[(int)$row['client_id']] = (float)$row['total'];
+            }
+            $res->close();
+        }
+        $stmt->close();
+
+        return $map;
     }
 }

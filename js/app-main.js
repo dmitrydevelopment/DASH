@@ -96,14 +96,6 @@ function switchTab(tabName) {
 
 // Status Tab
 function initStatusTab() {
-  initPeriodSelector();
-
-  try {
-    initRevenueChart();
-  } catch (err) {
-    console.error('initRevenueChart failed', err);
-  }
-
   Promise.resolve()
     .then(() => initKanbanBoard())
     .catch((err) => {
@@ -114,48 +106,16 @@ function initStatusTab() {
   updateMetricsByPeriod();
 }
 
-function initPeriodSelector() {
-  const periodSelect = document.getElementById('periodSelect');
-  if (periodSelect) {
-    periodSelect.addEventListener('change', (e) => {
-      currentPeriod = e.target.value;
-      updateMetricsByPeriod();
-      initRevenueChart();
-    });
-  }
-}
-
 function updateMetricsByPeriod() {
-  // Calculate actual metrics from data
-  const nearestPayments = appData.support
-    .filter(client => client.status === 'Ожидание оплаты')
-    .reduce((sum, client) => sum + client.monthly, 0);
+  const metrics = statusBoardState.metrics || {};
+  const nearestPayments = Number(metrics.nearest_payments || 0);
+  const confirmedTotal = Number(metrics.confirmed_total || 0);
+  const mrr = Number(metrics.mrr || 0);
 
-  const confirmedTotal = appData.revenue
-    .reduce((sum, item) => sum + item.amount, 0);
-
-  // Simulate different metrics based on period
-  const periodMultipliers = {
-    'current-month': 1.0,
-    'last-month': 0.85,
-    'quarter': 2.8,
-    'half-year': 5.2,
-    'year': 11.5
-  };
-
-  const multiplier = periodMultipliers[currentPeriod] || 1.0;
-  const baseRevenue = 955650;
-  const baseMRR = 521200;
-  const baseProjects = 35;
-  const baseLTV = 2411400;
-
-  // Update metric values
   const nearestPaymentsElement = document.getElementById('nearestPaymentsValue');
   const confirmedTotalElement = document.getElementById('confirmedTotalValue');
-  const revenueElement = document.getElementById('totalRevenueValue');
   const mrrElement = document.getElementById('mrrValue');
-  const projectsElement = document.getElementById('activeProjectsValue');
-  const ltvElement = document.getElementById('ltvValue');
+  const revenueElement = document.getElementById('totalRevenueValue');
 
   if (nearestPaymentsElement) {
     nearestPaymentsElement.textContent = formatCurrency(nearestPayments);
@@ -165,23 +125,8 @@ function updateMetricsByPeriod() {
     confirmedTotalElement.textContent = formatCurrency(confirmedTotal);
   }
 
-  if (revenueElement) {
-    revenueElement.textContent = formatCurrency(Math.round(baseRevenue * multiplier));
-  }
-
-  if (mrrElement && (currentPeriod === 'current-month' || currentPeriod === 'last-month')) {
-    mrrElement.textContent = formatCurrency(Math.round(baseMRR * multiplier));
-  } else if (mrrElement) {
-    mrrElement.textContent = formatCurrency(Math.round(baseMRR * Math.min(multiplier, 2.5)));
-  }
-
-  if (projectsElement) {
-    projectsElement.textContent = Math.round(baseProjects * Math.min(multiplier, 1.5));
-  }
-
-  if (ltvElement) {
-    ltvElement.textContent = formatCurrency(Math.round(baseLTV * Math.min(multiplier, 2.0)));
-  }
+  if (revenueElement) revenueElement.textContent = formatCurrency(confirmedTotal);
+  if (mrrElement) mrrElement.textContent = formatCurrency(mrr);
 }
 
 function initRevenueChart() {
@@ -283,11 +228,21 @@ let invoicePlanState = {
   clientOptions: []
 };
 
+let statusBoardState = {
+  projects: [],
+  endMonth: [],
+  waitingRecent: [],
+  waitingOverdue: [],
+  metrics: {},
+  meta: {}
+};
+let actsBootstrapLoading = false;
+
 async function initKanbanBoard() {
-  await loadInvoicePlans();
+  await loadStatusBoard();
   bindInvoicePlanDnD();
   bindInvoicePlanModalActions();
-  bindInvoicePlanAddAction();
+  bindStatusActions();
 }
 
 
@@ -393,9 +348,9 @@ function normalizeInvoicePlanRow(item) {
   return out;
 }
 
-async function loadInvoicePlans() {
+async function loadStatusBoard() {
   try {
-    const resp = await fetch('/api.php/finance/invoice-plans', {
+    const resp = await fetch('/api.php/finance/status-board', {
       credentials: 'same-origin',
       cache: 'no-store',
       headers: { 'Accept': 'application/json' }
@@ -403,70 +358,106 @@ async function loadInvoicePlans() {
 
     if (!resp.ok) {
       const text = await resp.text();
-      throw new Error(`failed to load invoice plans: HTTP ${resp.status} ${text.slice(0, 200)}`);
+      throw new Error(`failed to load status board: HTTP ${resp.status} ${text.slice(0, 200)}`);
     }
 
     const data = await resp.json();
-    const rows = Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
-    invoicePlanState.items = rows.map(normalizeInvoicePlanRow);
+    const board = data && data.data ? data.data : {};
+    statusBoardState.projects = Array.isArray(board.projects_in_work) ? board.projects_in_work : [];
+    statusBoardState.endMonth = Array.isArray(board.end_month) ? board.end_month.map(normalizeInvoicePlanRow) : [];
+    statusBoardState.waitingRecent = Array.isArray(board.waiting_recent) ? board.waiting_recent.map(normalizeInvoicePlanRow) : [];
+    statusBoardState.waitingOverdue = Array.isArray(board.waiting_overdue) ? board.waiting_overdue.map(normalizeInvoicePlanRow) : [];
+    statusBoardState.meta = board.meta || {};
+    statusBoardState.metrics = board.metrics || {};
+
+    invoicePlanState.items = []
+      .concat(statusBoardState.endMonth)
+      .concat(statusBoardState.waitingRecent)
+      .concat(statusBoardState.waitingOverdue);
+
     renderInvoicePlanBoard();
+    updateMetricsByPeriod();
   } catch (err) {
-    console.error('loadInvoicePlans error', err);
-    showToast('Не удалось загрузить канбан счетов', 'error');
+    console.error('loadStatusBoard error', err);
+    showToast('Не удалось загрузить статус-доску', 'error');
   }
 }
 
 function renderInvoicePlanBoard() {
-  const planned = invoicePlanState.items.filter((x) => x.status === INVOICE_PLAN_STATUS.planned);
-  const waiting = invoicePlanState.items.filter((x) => x.status === INVOICE_PLAN_STATUS.waiting);
+  const projectsContainer = document.getElementById('kanban-projects');
+  const endMonthContainer = document.getElementById('kanban-end-month');
+  const waitingRecentContainer = document.getElementById('kanban-waiting-recent');
+  const waitingOverdueContainer = document.getElementById('kanban-waiting-overdue');
 
-  const plannedContainer = document.getElementById('kanban-planned') || document.getElementById('kanban-invoice');
-  const waitingContainer = document.getElementById('kanban-waiting') || document.getElementById('kanban-payment');
-
-  if (!plannedContainer || !waitingContainer) {
+  if (!projectsContainer || !endMonthContainer || !waitingRecentContainer || !waitingOverdueContainer) {
     console.warn('Kanban containers not found');
     return;
   }
 
-  plannedContainer.innerHTML = '';
-  waitingContainer.innerHTML = '';
+  projectsContainer.innerHTML = '';
+  endMonthContainer.innerHTML = '';
+  waitingRecentContainer.innerHTML = '';
+  waitingOverdueContainer.innerHTML = '';
 
-  planned.forEach((item) => plannedContainer.appendChild(createInvoicePlanCard(item)));
-  waiting.forEach((item) => waitingContainer.appendChild(createInvoicePlanCard(item)));
+  statusBoardState.projects.forEach((item) => projectsContainer.appendChild(createProjectCard(item)));
+  statusBoardState.endMonth.forEach((item) => endMonthContainer.appendChild(createEndMonthCard(item)));
+  statusBoardState.waitingRecent.forEach((item) => waitingRecentContainer.appendChild(createWaitingCard(item, false)));
+  statusBoardState.waitingOverdue.forEach((item) => waitingOverdueContainer.appendChild(createWaitingCard(item, true)));
 
-  const plannedCount = document.getElementById('kanban-planned-count');
+  const plannedCount = document.getElementById('kanban-projects-count');
+  const endMonthCount = document.getElementById('kanban-end-month-count');
+  const endMonthDate = document.getElementById('kanban-end-month-date');
   const waitingCount = document.getElementById('kanban-waiting-count');
-  if (plannedCount) plannedCount.textContent = String(planned.length);
-  if (waitingCount) waitingCount.textContent = String(waiting.length);
+  if (plannedCount) plannedCount.textContent = String(statusBoardState.projects.length);
+  if (endMonthCount) endMonthCount.textContent = String(statusBoardState.endMonth.length);
+  if (waitingCount) waitingCount.textContent = String(statusBoardState.waitingRecent.length + statusBoardState.waitingOverdue.length);
+
+  if (endMonthDate) {
+    const first = statusBoardState.endMonth[0];
+    const label = first && first.planned_send_date
+      ? `Дата отправки: ${String(first.planned_send_date).slice(0, 10)}`
+      : 'Дата отправки: —';
+    endMonthDate.textContent = label;
+  }
 }
 
-function createInvoicePlanCard(item) {
+function createProjectCard(item) {
+  const card = document.createElement('div');
+  card.className = 'kanban-card';
+  const projectId = Number(item.id);
+  const actionable = Number.isFinite(projectId) && projectId > 0;
+  const isReady = String(item.status || '') === 'ready_to_invoice';
+
+  card.innerHTML = `
+    <h5>${escapeHtml(item.client_name || '—')}</h5>
+    <div class="category">Проект: ${escapeHtml(item.name || '—')}</div>
+    <div class="amount">${formatCurrency(Number(item.amount || 0))}</div>
+    <div class="status status--${isReady ? 'warning' : 'info'}">${isReady ? 'Можно выставлять счет' : 'В работе'}</div>
+    <div class="kanban-card-actions">
+      ${actionable && !isReady ? `<button type="button" class="action-btn action-btn--edit" onclick="markProjectReady(${projectId})">Готов к счету</button>` : ''}
+      ${actionable && isReady ? `<button type="button" class="action-btn action-btn--edit" onclick="invoiceProject(${projectId})">Выставить счет</button>` : ''}
+    </div>
+  `;
+
+  return card;
+}
+
+function createEndMonthCard(item) {
   const card = document.createElement('div');
   card.className = 'kanban-card';
   const planId = Number(item.id);
   const actionable = Number.isFinite(planId) && planId > 0;
-  const isPlanned = item.status === INVOICE_PLAN_STATUS.planned;
-  const isWaiting = item.status === INVOICE_PLAN_STATUS.waiting;
-  card.draggable = actionable && isPlanned;
+  card.draggable = actionable;
   card.dataset.planId = String(item.id);
-
-  const isOverdue = isWaiting && Number(item.days_since_sent || 0) > Number(item.payment_due_days || 7);
-  const paymentLabel = item.status === INVOICE_PLAN_STATUS.paid
-    ? 'Оплачен'
-    : (isOverdue ? 'Просрочен' : 'Не оплачен');
 
   card.innerHTML = `
     <h5>${escapeHtml(item.client_name || '—')}</h5>
     <div class="category">Период: ${escapeHtml(item.period_label || '—')}</div>
     <div class="amount">${formatCurrency(Number(item.total_sum || 0))}</div>
-    <div class="category">Создан: ${escapeHtml(item.created_date || '—')}</div>
-    ${isWaiting ? `<div class="category">Отправлен: ${escapeHtml(item.sent_date || '—')}</div>` : ''}
-    ${isWaiting ? `<div class="category">${Number(item.days_since_sent || 0)} дн. назад выставлен</div>` : ''}
-    ${isWaiting ? `<div class="status status--${isOverdue ? 'error' : 'info'}">${paymentLabel}</div>` : ''}
+    <div class="category">План отправки: ${escapeHtml(item.planned_send_date || '—')}</div>
     <div class="kanban-card-actions">
-      ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="openInvoicePlanEdit(${planId})">Редактировать</button>
-      <button type="button" class="action-btn action-btn--delete" onclick="deleteInvoicePlan(${planId})">Удалить</button>` : ''}
-      ${(actionable && isWaiting) ? `<button type="button" class="action-btn action-btn--edit" onclick="sendReminder(${planId}, event)">Напомнить</button>` : ''}
+      ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="openInvoicePlanEdit(${planId})">Редактировать</button>` : ''}
+      ${actionable ? `<button type="button" class="action-btn action-btn--delete" onclick="deleteInvoicePlan(${planId})">Удалить</button>` : ''}
     </div>
   `;
 
@@ -482,8 +473,33 @@ function createInvoicePlanCard(item) {
   return card;
 }
 
+function createWaitingCard(item, forceOverdue) {
+  const card = document.createElement('div');
+  card.className = `kanban-card ${forceOverdue ? 'overdue' : ''}`;
+  const planId = Number(item.id);
+  const actionable = Number.isFinite(planId) && planId > 0;
+  const isOverdue = forceOverdue || (Number(item.days_since_sent || 0) > Number(item.payment_due_days || 7));
+  const paymentLabel = isOverdue ? 'Просрочен' : 'Не оплачен';
+
+  card.innerHTML = `
+    <h5>${escapeHtml(item.client_name || '—')}</h5>
+    <div class="category">Период: ${escapeHtml(item.period_label || '—')}</div>
+    <div class="amount">${formatCurrency(Number(item.total_sum || 0))}</div>
+    <div class="category">Отправлен: ${escapeHtml(item.sent_date || '—')}</div>
+    <div class="category">${Number(item.days_since_sent || 0)} дн. назад выставлен</div>
+    <div class="status status--${isOverdue ? 'error' : 'info'}">${paymentLabel}</div>
+    <div class="kanban-card-actions">
+      ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="openInvoicePlanEdit(${planId})">Редактировать</button>` : ''}
+      ${actionable ? `<button type="button" class="action-btn action-btn--delete" onclick="deleteInvoicePlan(${planId})">Удалить</button>` : ''}
+      ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="sendReminder(${planId}, event)">Напомнить</button>` : ''}
+    </div>
+  `;
+
+  return card;
+}
+
 function bindInvoicePlanDnD() {
-  const waitingColumn = document.getElementById('kanban-waiting') || document.getElementById('kanban-payment');
+  const waitingColumn = document.getElementById('kanban-waiting-recent') || document.getElementById('kanban-payment');
   if (!waitingColumn || waitingColumn.dataset.dndBind === '1') return;
 
   waitingColumn.dataset.dndBind = '1';
@@ -498,17 +514,24 @@ function bindInvoicePlanDnD() {
     event.preventDefault();
     waitingColumn.classList.remove('kanban-drop-target');
     if (!invoicePlanState.draggedPlanId) return;
-    const plan = invoicePlanState.items.find((x) => Number(x.id) === Number(invoicePlanState.draggedPlanId));
+    const plan = statusBoardState.endMonth.find((x) => Number(x.id) === Number(invoicePlanState.draggedPlanId));
     if (!plan || plan.status !== INVOICE_PLAN_STATUS.planned) return;
     openInvoicePlanSendModal(plan, 'send');
   });
 }
 
-function bindInvoicePlanAddAction() {
-  const btn = document.getElementById('kanbanAddPlannedBtn');
-  if (!btn || btn.dataset.bind === '1') return;
-  btn.dataset.bind = '1';
-  btn.addEventListener('click', () => { openInvoicePlanCreateModal(); });
+function bindStatusActions() {
+  const addProjectBtn = document.getElementById('kanbanAddProjectBtn');
+  if (addProjectBtn && addProjectBtn.dataset.bind !== '1') {
+    addProjectBtn.dataset.bind = '1';
+    addProjectBtn.addEventListener('click', () => { openProjectQuickCreate(); });
+  }
+
+  const sendNowBtn = document.getElementById('kanbanEndMonthSendNowBtn');
+  if (sendNowBtn && sendNowBtn.dataset.bind !== '1') {
+    sendNowBtn.dataset.bind = '1';
+    sendNowBtn.addEventListener('click', () => { sendEndMonthNow(); });
+  }
 }
 
 function bindInvoicePlanModalActions() {
@@ -634,13 +657,13 @@ function bindInvoicePlanModalActions() {
         showToast('Счет выставлен и отправлен', 'success');
       }
       close();
-      await loadInvoicePlans();
+      await loadStatusBoard();
 
       if (mode === 'create' && payload.send_now && createdPlanId > 0) {
         const hasCreatedCard = invoicePlanState.items.some((item) => Number(item.id) === createdPlanId);
         if (!hasCreatedCard) {
           await new Promise((resolve) => setTimeout(resolve, 700));
-          await loadInvoicePlans();
+          await loadStatusBoard();
         }
       }
     } catch (err) {
@@ -924,10 +947,107 @@ async function deleteInvoicePlan(planId) {
     });
     if (!resp.ok) throw new Error('delete failed');
     showToast('Карточка удалена', 'success');
-    await loadInvoicePlans();
+    await loadStatusBoard();
   } catch (err) {
     console.error(err);
     showToast('Ошибка удаления карточки', 'error');
+  }
+}
+
+async function openProjectQuickCreate() {
+  await ensureInvoicePlanClients(true);
+  const clients = getInvoicePlanClientsSource();
+  if (!Array.isArray(clients) || clients.length === 0) {
+    showToast('Сначала добавьте клиента', 'error');
+    return;
+  }
+
+  const clientName = prompt('Клиент (название):', clients[0]?.name || '');
+  if (!clientName) return;
+  const client = clients.find((c) => String(c.name || '').toLowerCase() === String(clientName).toLowerCase())
+    || clients.find((c) => String(c.name || '').toLowerCase().includes(String(clientName).toLowerCase()));
+  if (!client) {
+    showToast('Клиент не найден', 'error');
+    return;
+  }
+
+  const projectName = prompt('Название проекта:', '');
+  if (!projectName) return;
+  const amountRaw = prompt('Сумма проекта, руб:', '');
+  const amount = Number(String(amountRaw || '').replace(',', '.'));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showToast('Некорректная сумма', 'error');
+    return;
+  }
+
+  try {
+    const resp = await fetch('/api.php/finance/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        client_id: Number(client.id),
+        name: projectName,
+        amount: amount,
+        work_items: [{ name: projectName, amount: amount, category: '' }]
+      })
+    });
+    if (!resp.ok) throw new Error('create project failed');
+    showToast('Проект добавлен', 'success');
+    await loadStatusBoard();
+  } catch (err) {
+    console.error(err);
+    showToast('Не удалось добавить проект', 'error');
+  }
+}
+
+async function markProjectReady(projectId) {
+  try {
+    const resp = await fetch(`/api.php/finance/projects/${projectId}/ready`, {
+      method: 'POST',
+      credentials: 'same-origin'
+    });
+    if (!resp.ok) throw new Error('set ready failed');
+    showToast('Проект переведен в "Можно выставлять счет"', 'success');
+    await loadStatusBoard();
+  } catch (err) {
+    console.error(err);
+    showToast('Не удалось сменить статус проекта', 'error');
+  }
+}
+
+async function invoiceProject(projectId) {
+  try {
+    const resp = await fetch(`/api.php/finance/projects/${projectId}/invoice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ send_date: formatDateForInput(new Date()) })
+    });
+    if (!resp.ok) throw new Error('project invoice failed');
+    showToast('Счет по проекту выставлен', 'success');
+    await loadStatusBoard();
+  } catch (err) {
+    console.error(err);
+    showToast('Не удалось выставить счет по проекту', 'error');
+  }
+}
+
+async function sendEndMonthNow() {
+  if (!confirm('Отправить все карточки из "Конца месяца" сейчас?')) return;
+  try {
+    const resp = await fetch('/api.php/finance/invoice-plans/send-end-month-now', {
+      method: 'POST',
+      credentials: 'same-origin'
+    });
+    if (!resp.ok) throw new Error('mass send failed');
+    const data = await resp.json().catch(() => null);
+    const sent = Number(data?.sent || 0);
+    showToast(`Отправлено: ${sent}`, 'success');
+    await loadStatusBoard();
+  } catch (err) {
+    console.error(err);
+    showToast('Не удалось выполнить массовую отправку', 'error');
   }
 }
 
@@ -990,7 +1110,64 @@ function switchFinanceSubcategory(subcategory) {
     case 'receivables':
       initReceivablesSubcategory();
       break;
+    case 'acts':
+      initActsSubcategory();
+      break;
   }
+}
+
+function initActsSubcategory() {
+  const root = document.getElementById('financeActsTable');
+  if (!root) return;
+
+  if (!invoicePlanState.items.length && !actsBootstrapLoading) {
+    actsBootstrapLoading = true;
+    loadStatusBoard()
+      .finally(() => {
+        actsBootstrapLoading = false;
+        initActsSubcategory();
+      });
+    root.innerHTML = '<div class="loading-indicator active">Загрузка данных...</div>';
+    return;
+  }
+
+  const plans = Array.isArray(invoicePlanState.items) ? invoicePlanState.items : [];
+  const waiting = plans.filter((p) => String(p.status || '') === INVOICE_PLAN_STATUS.waiting);
+
+  if (waiting.length === 0) {
+    root.innerHTML = '<div class="no-data">Нет данных по актам</div>';
+    return;
+  }
+
+  const rows = waiting.map((p) => {
+    const hasAct = !!p.act_download_url;
+    const period = p.period_label || '—';
+    const client = p.client_name || '—';
+    const link = hasAct
+      ? `<a href="${escapeHtml(p.act_download_url)}" target="_blank" rel="noopener">Акт PDF</a>`
+      : '—';
+    const status = hasAct ? 'Доступен' : 'Нет акта';
+    return `<tr>
+      <td>${escapeHtml(period)}</td>
+      <td>${escapeHtml(client)}</td>
+      <td>${link}</td>
+      <td>${escapeHtml(status)}</td>
+    </tr>`;
+  }).join('');
+
+  root.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Период</th>
+          <th>Клиент</th>
+          <th>Акт PDF</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
 }
 
 function initFinanceOverview() {
@@ -5271,7 +5448,7 @@ async function sendReminder(invoicePlanId, event) {
     });
     if (!resp.ok) throw new Error('remind failed');
     showToast('Напоминание отправлено', 'info');
-    await loadInvoicePlans();
+    await loadStatusBoard();
   } catch (err) {
     console.error(err);
     showToast('Ошибка отправки напоминания', 'error');
@@ -6323,6 +6500,10 @@ window.editClient = editClient;
 window.deleteClient = deleteClient;
 window.closeClientModal = closeClientModal;
 window.sendReminder = sendReminder;
+window.markProjectReady = markProjectReady;
+window.invoiceProject = invoiceProject;
+window.openProjectQuickCreate = openProjectQuickCreate;
+window.sendEndMonthNow = sendEndMonthNow;
 window.showToast = showToast;
 window.removeToast = removeToast;
 window.showConfirmModal = showConfirmModal;

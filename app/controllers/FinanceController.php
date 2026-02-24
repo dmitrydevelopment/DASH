@@ -3,18 +3,23 @@
 require_once APP_BASE_PATH . '/app/models/FinanceDocumentModel.php';
 require_once APP_BASE_PATH . '/app/models/FinanceSendEventModel.php';
 require_once APP_BASE_PATH . '/app/models/InvoicePlanModel.php';
+require_once APP_BASE_PATH . '/app/models/FinanceProjectModel.php';
 
 class FinanceController
 {
+    private $db;
     private $docs;
     private $events;
     private $plans;
+    private $projects;
 
     public function __construct(mysqli $db)
     {
+        $this->db = $db;
         $this->docs = new FinanceDocumentModel($db);
         $this->events = new FinanceSendEventModel($db);
         $this->plans = new InvoicePlanModel($db);
+        $this->projects = new FinanceProjectModel($db);
     }
 
     /**
@@ -87,7 +92,7 @@ class FinanceController
         Auth::requireAuth();
         $rows = $this->plans->all();
 
-        $paymentDueDays = 7;
+        $paymentDueDays = $this->getOverdueDaysSetting();
         foreach ($rows as &$row) {
             $row['items_snapshot'] = json_decode((string)($row['work_items_json'] ?? '[]'), true);
             if (!is_array($row['items_snapshot'])) {
@@ -146,6 +151,126 @@ class FinanceController
         }
 
         sendJson(['data' => $rows]);
+    }
+
+    public function statusBoard()
+    {
+        Auth::requireAuth();
+
+        $rows = $this->plans->all();
+        $projects = $this->projects->all();
+        $paymentDueDays = $this->getOverdueDaysSetting();
+
+        $clientIds = [];
+        foreach ($rows as $row) {
+            $clientIds[] = (int)($row['client_id'] ?? 0);
+        }
+        $invoiceSums = $this->plans->getClientInvoiceSums($clientIds);
+
+        $endMonth = [];
+        $waitingRecent = [];
+        $waitingOverdue = [];
+
+        foreach ($rows as $row) {
+            $row['items_snapshot'] = json_decode((string)($row['work_items_json'] ?? '[]'), true);
+            if (!is_array($row['items_snapshot'])) {
+                $row['items_snapshot'] = [];
+            }
+
+            $sum = 0.0;
+            foreach ($row['items_snapshot'] as $line) {
+                $sum += (float)($line['amount'] ?? 0);
+            }
+            $cid = (int)($row['client_id'] ?? 0);
+            if (isset($invoiceSums[$cid]) && $invoiceSums[$cid] > 0) {
+                $sum = (float)$invoiceSums[$cid];
+            }
+
+            $row['total_sum'] = $sum;
+            $row['period_label'] = sprintf('%02d.%04d', (int)$row['period_month'], (int)$row['period_year']);
+            $row['created_date'] = !empty($row['created_at']) ? date('d.m.Y', strtotime($row['created_at'])) : '—';
+            $row['sent_date'] = !empty($row['sent_at']) ? date('d.m.Y', strtotime($row['sent_at'])) : '—';
+            $row['payment_due_days'] = $paymentDueDays;
+            $row['days_since_sent'] = !empty($row['sent_at']) ? (int) floor((time() - strtotime($row['sent_at'])) / 86400) : 0;
+
+            if (($row['status'] ?? '') === 'planned'
+                && (int)($row['send_invoice_schedule'] ?? 0) === 1
+                && (int)($row['invoice_use_end_month_date'] ?? 0) === 1
+            ) {
+                $endMonth[] = $row;
+                continue;
+            }
+
+            if (($row['status'] ?? '') === 'sent_waiting_payment') {
+                if ((int)$row['days_since_sent'] > $paymentDueDays) {
+                    $waitingOverdue[] = $row;
+                } else {
+                    $waitingRecent[] = $row;
+                }
+            }
+        }
+
+        $projectsOut = [];
+        foreach ($projects as $project) {
+            $workItems = json_decode((string)($project['work_items_json'] ?? '[]'), true);
+            if (!is_array($workItems)) {
+                $workItems = [];
+            }
+            $projectsOut[] = [
+                'id' => (int)$project['id'],
+                'client_id' => (int)$project['client_id'],
+                'client_name' => (string)($project['client_name'] ?? ''),
+                'name' => (string)($project['name'] ?? ''),
+                'amount' => (float)($project['amount'] ?? 0),
+                'work_items_json' => $project['work_items_json'] ?? '[]',
+                'work_items' => $workItems,
+                'status' => (string)($project['status'] ?? 'in_work'),
+                'created_at' => $project['created_at'] ?? null,
+                'updated_at' => $project['updated_at'] ?? null
+            ];
+        }
+
+        $nearest = 0.0;
+        $confirmed = 0.0;
+        $mrr = 0.0;
+        foreach ($waitingRecent as $row) {
+            $nearest += (float)($row['total_sum'] ?? 0);
+        }
+        foreach ($waitingOverdue as $row) {
+            $nearest += (float)($row['total_sum'] ?? 0);
+        }
+        foreach ($endMonth as $row) {
+            $confirmed += (float)($row['total_sum'] ?? 0);
+            $mrr += (float)($row['total_sum'] ?? 0);
+        }
+        foreach ($waitingRecent as $row) {
+            $confirmed += (float)($row['total_sum'] ?? 0);
+            $mrr += (float)($row['total_sum'] ?? 0);
+        }
+        foreach ($waitingOverdue as $row) {
+            $confirmed += (float)($row['total_sum'] ?? 0);
+            $mrr += (float)($row['total_sum'] ?? 0);
+        }
+        foreach ($projectsOut as $project) {
+            $confirmed += (float)($project['amount'] ?? 0);
+        }
+
+        sendJson([
+            'data' => [
+                'projects_in_work' => $projectsOut,
+                'end_month' => $endMonth,
+                'waiting_recent' => $waitingRecent,
+                'waiting_overdue' => $waitingOverdue,
+                'meta' => [
+                    'payment_due_days' => $paymentDueDays
+                ],
+                'metrics' => [
+                    'nearest_payments' => $nearest,
+                    'confirmed_total' => $confirmed,
+                    'mrr' => $mrr
+                ]
+            ]
+        ]);
     }
 
     public function invoicePlansCreate()
@@ -247,13 +372,66 @@ class FinanceController
         $this->performInvoicePlanSend($plan, (int)$id, $payload);
     }
 
+    public function invoicePlansSendEndMonthNow()
+    {
+        Auth::requireAuth();
+
+        $rows = $this->plans->all();
+        $sent = 0;
+        $skipped = 0;
+        $errors = [];
+
+        foreach ($rows as $plan) {
+            if (($plan['status'] ?? '') !== 'planned'
+                || (int)($plan['send_invoice_schedule'] ?? 0) !== 1
+                || (int)($plan['invoice_use_end_month_date'] ?? 0) !== 1
+            ) {
+                continue;
+            }
+
+            $id = (int)($plan['id'] ?? 0);
+            if ($id <= 0) {
+                $skipped++;
+                continue;
+            }
+
+            $payload = $this->buildPlanPayloadFromStoredData($plan, true);
+            try {
+                $result = $this->sendInvoicePlanInternal($plan, $id, $payload, false);
+                if (!empty($result['ok'])) {
+                    $sent++;
+                } else {
+                    $skipped++;
+                }
+            } catch (Exception $e) {
+                $errors[] = ['plan_id' => $id, 'message' => $e->getMessage()];
+            }
+        }
+
+        sendJson([
+            'ok' => true,
+            'sent' => $sent,
+            'skipped' => $skipped,
+            'errors' => $errors
+        ]);
+    }
+
     private function performInvoicePlanSend(array $plan, int $id, array $payload)
+    {
+        $result = $this->sendInvoicePlanInternal($plan, $id, $payload);
+        sendJson($result);
+    }
+
+    private function sendInvoicePlanInternal(array $plan, int $id, array $payload, bool $strict = true)
     {
         $items = isset($payload['items_snapshot']) && is_array($payload['items_snapshot'])
             ? $payload['items_snapshot']
             : json_decode((string)($plan['work_items_json'] ?? '[]'), true);
         if (!is_array($items) || empty($items)) {
-            sendError('VALIDATION_ERROR', 'Укажите строки работ', 422);
+            if ($strict) {
+                sendError('VALIDATION_ERROR', 'Укажите строки работ', 422);
+            }
+            throw new RuntimeException('Укажите строки работ');
         }
 
         $email = isset($payload['email']) ? trim((string)$payload['email']) : (string)$plan['email'];
@@ -266,7 +444,10 @@ class FinanceController
         }
 
         if ($total <= 0) {
-            sendError('VALIDATION_ERROR', 'Сумма счета должна быть больше 0', 422);
+            if ($strict) {
+                sendError('VALIDATION_ERROR', 'Сумма счета должна быть больше 0', 422);
+            }
+            throw new RuntimeException('Сумма счета должна быть больше 0');
         }
 
         $itemsJson = json_encode($items, JSON_UNESCAPED_UNICODE);
@@ -285,7 +466,10 @@ class FinanceController
         $token = hash('sha256', $docNumber . '|' . microtime(true));
         $documentId = $this->plans->insertFinanceDocument($plan, $docNumber, $token, $total);
         if ($documentId <= 0) {
-            sendError('DOCUMENT_CREATE_FAILED', 'Не удалось создать счет', 500);
+            if ($strict) {
+                sendError('DOCUMENT_CREATE_FAILED', 'Не удалось создать счет', 500);
+            }
+            throw new RuntimeException('Не удалось создать счет');
         }
 
         $this->plans->setSent($id, $documentId);
@@ -308,12 +492,12 @@ class FinanceController
             $this->plans->insertSendEvent($documentId, 'diadoc', (string)($plan['diadoc_box_id'] ?? ''), 'skipped', 'Diadoc disabled');
         }
 
-        sendJson([
+        return [
             'ok' => true,
             'plan_id' => $id,
             'status' => 'sent_waiting_payment',
             'document_id' => $documentId
-        ]);
+        ];
     }
 
     public function invoicePlansRemind($id)
@@ -346,6 +530,197 @@ class FinanceController
         }
 
         sendJson(['ok' => true]);
+    }
+
+    public function projectsIndex()
+    {
+        Auth::requireAuth();
+        sendJson(['data' => $this->projects->all()]);
+    }
+
+    public function projectsCreate()
+    {
+        Auth::requireAuth();
+        $payload = getJsonPayload();
+        $clientId = (int)($payload['client_id'] ?? 0);
+        $name = trim((string)($payload['name'] ?? ''));
+        $amount = (float)($payload['amount'] ?? 0);
+        $items = isset($payload['work_items']) && is_array($payload['work_items']) ? $payload['work_items'] : [];
+
+        if ($clientId <= 0 || $name === '' || $amount <= 0) {
+            sendError('VALIDATION_ERROR', 'Заполните поля клиента, названия и суммы', 422);
+        }
+
+        if (empty($items)) {
+            $items = [[
+                'name' => $name,
+                'amount' => $amount,
+                'category' => ''
+            ]];
+        }
+
+        $itemsJson = json_encode($items, JSON_UNESCAPED_UNICODE);
+        $id = $this->projects->create($clientId, $name, $amount, $itemsJson);
+        if ($id <= 0) {
+            sendError('CREATE_FAILED', 'Не удалось создать проект', 500);
+        }
+
+        sendJson(['ok' => true, 'id' => $id]);
+    }
+
+    public function projectsUpdate($id)
+    {
+        Auth::requireAuth();
+        $project = $this->projects->find((int)$id);
+        if (!$project) {
+            sendError('NOT_FOUND', 'Проект не найден', 404);
+        }
+
+        $payload = getJsonPayload();
+        $name = trim((string)($payload['name'] ?? $project['name']));
+        $amount = (float)($payload['amount'] ?? $project['amount']);
+        $items = isset($payload['work_items']) && is_array($payload['work_items'])
+            ? $payload['work_items']
+            : json_decode((string)($project['work_items_json'] ?? '[]'), true);
+        if (!is_array($items)) {
+            $items = [];
+        }
+        $itemsJson = json_encode($items, JSON_UNESCAPED_UNICODE);
+
+        if ($name === '' || $amount <= 0) {
+            sendError('VALIDATION_ERROR', 'Название и сумма проекта обязательны', 422);
+        }
+
+        $ok = $this->projects->updateEditable((int)$id, $name, $amount, $itemsJson);
+        if (!$ok) {
+            sendError('UPDATE_FAILED', 'Не удалось обновить проект', 500);
+        }
+
+        sendJson(['ok' => true]);
+    }
+
+    public function projectsSetReady($id)
+    {
+        Auth::requireAuth();
+        $project = $this->projects->find((int)$id);
+        if (!$project) {
+            sendError('NOT_FOUND', 'Проект не найден', 404);
+        }
+
+        $ok = $this->projects->setStatus((int)$id, 'ready_to_invoice');
+        if (!$ok) {
+            sendError('UPDATE_FAILED', 'Не удалось изменить статус проекта', 500);
+        }
+
+        sendJson(['ok' => true]);
+    }
+
+    public function projectsSendInvoice($id)
+    {
+        Auth::requireAuth();
+        $project = $this->projects->find((int)$id);
+        if (!$project) {
+            sendError('NOT_FOUND', 'Проект не найден', 404);
+        }
+        if (($project['status'] ?? '') !== 'ready_to_invoice') {
+            sendError('INVALID_STATUS', 'Выставление счета доступно только для готовых проектов', 422);
+        }
+
+        $payload = getJsonPayload();
+        $sendDate = trim((string)($payload['send_date'] ?? date('Y-m-d')));
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $sendDate)) {
+            $sendDate = date('Y-m-d');
+        }
+
+        $periodYear = (int)date('Y', strtotime($sendDate));
+        $periodMonth = (int)date('m', strtotime($sendDate));
+        $periodLabel = sprintf('%02d.%04d', $periodMonth, $periodYear);
+
+        $items = json_decode((string)($project['work_items_json'] ?? '[]'), true);
+        if (!is_array($items) || empty($items)) {
+            $items = [[
+                'name' => (string)($project['name'] ?? 'Проектные работы'),
+                'amount' => (float)($project['amount'] ?? 0),
+                'category' => ''
+            ]];
+        }
+
+        $channelsJson = json_encode([
+            'email' => trim((string)($project['email'] ?? '')),
+            'send_telegram' => (int)($project['send_invoice_telegram'] ?? 0),
+            'send_diadoc' => (int)($project['send_invoice_diadoc'] ?? 0)
+        ], JSON_UNESCAPED_UNICODE);
+
+        $planId = $this->plans->create(
+            (int)$project['client_id'],
+            $periodYear,
+            $periodMonth,
+            $periodLabel,
+            json_encode($items, JSON_UNESCAPED_UNICODE),
+            $channelsJson,
+            $sendDate
+        );
+        if ($planId <= 0) {
+            sendError('CREATE_FAILED', 'Не удалось создать счет по проекту', 500);
+        }
+
+        $plan = $this->plans->find($planId);
+        if (!$plan) {
+            sendError('NOT_FOUND', 'Созданный счет не найден', 404);
+        }
+        $result = $this->sendInvoicePlanInternal($plan, $planId, [
+            'items_snapshot' => $items,
+            'email' => (string)($project['email'] ?? ''),
+            'send_telegram' => (int)($project['send_invoice_telegram'] ?? 0) === 1,
+            'send_diadoc' => (int)($project['send_invoice_diadoc'] ?? 0) === 1,
+            'send_date' => $sendDate,
+            'send_now' => true
+        ]);
+
+        $this->projects->delete((int)$id);
+
+        sendJson([
+            'ok' => true,
+            'project_id' => (int)$id,
+            'plan' => $result
+        ]);
+    }
+
+    private function getOverdueDaysSetting()
+    {
+        $sql = "SELECT finance_tbank_invoice_due_days AS due_days FROM crm_settings WHERE id = 1 LIMIT 1";
+        $res = $this->db->query($sql);
+        if ($res) {
+            $row = $res->fetch_assoc();
+            $res->close();
+            $v = isset($row['due_days']) ? (int)$row['due_days'] : 0;
+            if ($v > 0) {
+                return $v;
+            }
+        }
+        return 7;
+    }
+
+    private function buildPlanPayloadFromStoredData(array $plan, $sendNow)
+    {
+        $items = json_decode((string)($plan['work_items_json'] ?? '[]'), true);
+        if (!is_array($items)) {
+            $items = [];
+        }
+
+        $channels = json_decode((string)($plan['channels_json'] ?? '{}'), true);
+        if (!is_array($channels)) {
+            $channels = [];
+        }
+
+        return [
+            'items_snapshot' => $items,
+            'email' => trim((string)($channels['email'] ?? ($plan['email'] ?? ''))),
+            'send_telegram' => !empty($channels['send_telegram']),
+            'send_diadoc' => !empty($channels['send_diadoc']),
+            'send_date' => !empty($plan['planned_send_date']) ? (string)$plan['planned_send_date'] : date('Y-m-d'),
+            'send_now' => (bool)$sendNow
+        ];
     }
     private function ensureDocumentFileExists(array $doc)
     {
