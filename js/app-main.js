@@ -241,7 +241,6 @@ let projectStatusOptions = [];
 
 async function initKanbanBoard() {
   await loadStatusBoard();
-  bindInvoicePlanDnD();
   bindInvoicePlanModalActions();
   bindStatusActions();
 }
@@ -490,7 +489,7 @@ function createEndMonthCard(item) {
   card.className = 'kanban-card';
   const planId = Number(item.id);
   const actionable = Number.isFinite(planId) && planId > 0;
-  card.draggable = actionable;
+  card.draggable = false;
   card.dataset.planId = String(item.id);
 
   card.innerHTML = `
@@ -503,15 +502,6 @@ function createEndMonthCard(item) {
       ${actionable ? `<button type="button" class="action-btn action-btn--delete" onclick="deleteInvoicePlan(${planId})">Удалить</button>` : ''}
     </div>
   `;
-
-  card.addEventListener('dragstart', () => {
-    invoicePlanState.draggedPlanId = Number(item.id);
-    card.classList.add('dragging');
-  });
-  card.addEventListener('dragend', () => {
-    invoicePlanState.draggedPlanId = null;
-    card.classList.remove('dragging');
-  });
 
   return card;
 }
