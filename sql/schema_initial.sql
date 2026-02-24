@@ -56,7 +56,6 @@ CREATE TABLE `clients` (
   `diadoc_box_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `diadoc_department_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `notes` text COLLATE utf8mb4_unicode_ci,
-  `is_active` tinyint(1) NOT NULL DEFAULT '1',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -120,6 +119,25 @@ CREATE TABLE `crm_employee_roles` (
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+-- --------------------------------------------------------
+
+--
+-- Структура таблицы `work_categories`
+--
+-- Создание: Фев 22 2026 г., 18:00
+--
+
+DROP TABLE IF EXISTS `work_categories`;
+CREATE TABLE `work_categories` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `tag` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `sort_order` int(10) UNSIGNED NOT NULL DEFAULT '100',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- --------------------------------------------------------
 
 --
@@ -136,6 +154,8 @@ CREATE TABLE `crm_settings` (
   `dadata_token` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
   `scheduler_start_hour` tinyint(3) UNSIGNED NOT NULL DEFAULT '9',
   `crm_public_url` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `admin_email` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `admin_telegram_id` varchar(191) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finance_tbank_account_number` varchar(22) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finance_tbank_invoice_due_days` int(10) UNSIGNED NOT NULL DEFAULT '3',
   `finance_tbank_unit_default` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'шт',
@@ -179,7 +199,6 @@ CREATE TABLE `employees` (
   `avatar_path` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `is_default` tinyint(1) NOT NULL DEFAULT '0',
   `is_on_vacation` tinyint(1) NOT NULL DEFAULT '0',
-  `is_active` tinyint(1) NOT NULL DEFAULT '1',
   `salary_monthly` int(10) UNSIGNED NOT NULL DEFAULT '0',
   `start_date` date DEFAULT NULL,
   `skills_raw` text COLLATE utf8mb4_unicode_ci,
@@ -230,6 +249,29 @@ CREATE TABLE `employee_schedule` (
 --
 
 DROP TABLE IF EXISTS `finance_bank_operations`;
+
+-- --------------------------------------------------------
+
+--
+-- Структура таблицы `invoice_plans`
+--
+
+DROP TABLE IF EXISTS `invoice_plans`;
+CREATE TABLE `invoice_plans` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `client_id` int(10) UNSIGNED NOT NULL,
+  `period_year` smallint(5) UNSIGNED NOT NULL,
+  `period_month` tinyint(3) UNSIGNED NOT NULL,
+  `period_label` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `status` enum('planned','sent_waiting_payment','paid') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'planned',
+  `work_items_json` mediumtext COLLATE utf8mb4_unicode_ci,
+  `channels_json` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `document_id` int(10) UNSIGNED DEFAULT NULL,
+  `planned_send_date` date DEFAULT NULL,
+  `sent_at` datetime DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `finance_bank_operations` (
   `id` int(10) UNSIGNED NOT NULL,
   `operation_id` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
@@ -363,7 +405,6 @@ CREATE TABLE `users` (
   `login` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   `password_hash` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `role` enum('admin','employee') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'employee',
-  `is_active` tinyint(1) NOT NULL DEFAULT '1',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -409,6 +450,15 @@ ALTER TABLE `crm_employee_roles`
   ADD UNIQUE KEY `uniq_role_tag` (`role_tag`),
   ADD KEY `idx_sort` (`sort_order`);
 
+
+--
+-- Индексы таблицы `work_categories`
+--
+ALTER TABLE `work_categories`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_work_category_tag` (`tag`),
+  ADD KEY `idx_work_category_sort` (`sort_order`,`id`);
+
 --
 -- Индексы таблицы `crm_settings`
 --
@@ -439,6 +489,13 @@ ALTER TABLE `employee_schedule`
 --
 -- Индексы таблицы `finance_bank_operations`
 --
+ALTER TABLE `invoice_plans`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_invoice_plans_status` (`status`),
+  ADD KEY `idx_invoice_plans_period` (`period_year`,`period_month`),
+  ADD KEY `idx_invoice_plans_client` (`client_id`),
+  ADD KEY `idx_invoice_plans_document` (`document_id`);
+
 ALTER TABLE `finance_bank_operations`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uniq_operation_id` (`operation_id`),
@@ -556,6 +613,19 @@ ALTER TABLE `finance_download_events`
 ALTER TABLE `finance_send_events`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
+
+--
+-- AUTO_INCREMENT для таблицы `work_categories`
+--
+ALTER TABLE `work_categories`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT для таблицы `invoice_plans`
+--
+ALTER TABLE `invoice_plans`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
 --
 -- AUTO_INCREMENT для таблицы `users`
 --
@@ -577,6 +647,12 @@ ALTER TABLE `client_act_items`
 --
 ALTER TABLE `client_invoice_items`
   ADD CONSTRAINT `fk_cii_client_id` FOREIGN KEY (`client_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE;
+
+--
+-- Ограничения внешнего ключа таблицы `invoice_plans`
+--
+ALTER TABLE `invoice_plans`
+  ADD CONSTRAINT `fk_invoice_plans_client` FOREIGN KEY (`client_id`) REFERENCES `clients` (`id`) ON DELETE CASCADE;
 
 --
 -- Ограничения внешнего ключа таблицы `employee_salary_history`

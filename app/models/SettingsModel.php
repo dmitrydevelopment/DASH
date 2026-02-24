@@ -103,6 +103,8 @@ class SettingsModel
             'scheduler_start_hour' => (int) $this->col($row, $cols, 'scheduler_start_hour', 9),
 
             'crm_public_url' => (string) $this->col($row, $cols, 'crm_public_url', ''),
+            'admin_email' => (string) $this->col($row, $cols, 'admin_email', ''),
+            'admin_telegram_id' => (string) $this->col($row, $cols, 'admin_telegram_id', ''),
 
             'finance_invoice_number_prefix' => (string) $this->col($row, $cols, 'finance_invoice_number_prefix', 'INV-'),
             'finance_act_number_prefix' => (string) $this->col($row, $cols, 'finance_act_number_prefix', 'ACT-'),
@@ -151,6 +153,8 @@ class SettingsModel
             'scheduler_start_hour' => ['col' => 'scheduler_start_hour', 'type' => 'i'],
 
             'crm_public_url' => ['col' => 'crm_public_url', 'type' => 's'],
+            'admin_email' => ['col' => 'admin_email', 'type' => 's'],
+            'admin_telegram_id' => ['col' => 'admin_telegram_id', 'type' => 's'],
 
             'finance_invoice_number_prefix' => ['col' => 'finance_invoice_number_prefix', 'type' => 's'],
             'finance_act_number_prefix' => ['col' => 'finance_act_number_prefix', 'type' => 's'],
@@ -253,7 +257,7 @@ class SettingsModel
         $res = $this->db->query(
             "SELECT id, role_name, role_tag, sort_order
              FROM crm_employee_roles
-             ORDER BY sort_order ASC, id ASC"
+             ORDER BY id ASC"
         );
 
         $out = [];
@@ -312,4 +316,171 @@ class SettingsModel
             return false;
         }
     }
+
+    public function getWorkCategories(): array
+    {
+        $res = $this->db->query(
+            "SELECT id, name, tag, sort_order
+             FROM work_categories
+             ORDER BY id ASC"
+        );
+
+        $out = [];
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $out[] = [
+                    'id' => (int) $row['id'],
+                    'name' => (string) $row['name'],
+                    'tag' => (string) $row['tag'],
+                    'sort_order' => (int) $row['sort_order'],
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    public function createWorkCategory(string $name, string $tag, int $sortOrder): ?int
+    {
+        $stmt = $this->db->prepare(
+            "INSERT INTO work_categories (name, tag, sort_order) VALUES (?, ?, ?)"
+        );
+
+        if (!$stmt) {
+            $this->setError('Prepare createWorkCategory failed: ' . $this->db->error);
+            return null;
+        }
+
+        $stmt->bind_param('ssi', $name, $tag, $sortOrder);
+        $ok = $stmt->execute();
+        if (!$ok) {
+            $this->setError('Execute createWorkCategory failed: ' . $stmt->error);
+            $stmt->close();
+            return null;
+        }
+
+        $id = (int) $stmt->insert_id;
+        $stmt->close();
+        return $id;
+    }
+
+    public function updateWorkCategory(int $id, string $name, string $tag, int $sortOrder): bool
+    {
+        $stmt = $this->db->prepare(
+            "UPDATE work_categories
+             SET name = ?, tag = ?, sort_order = ?
+             WHERE id = ?"
+        );
+
+        if (!$stmt) {
+            $this->setError('Prepare updateWorkCategory failed: ' . $this->db->error);
+            return false;
+        }
+
+        $stmt->bind_param('ssii', $name, $tag, $sortOrder, $id);
+        $ok = $stmt->execute();
+        if (!$ok) {
+            $this->setError('Execute updateWorkCategory failed: ' . $stmt->error);
+            $stmt->close();
+            return false;
+        }
+
+        $stmt->close();
+        return true;
+    }
+
+    public function deleteWorkCategory(int $id): bool
+    {
+        $stmt = $this->db->prepare("DELETE FROM work_categories WHERE id = ?");
+        if (!$stmt) {
+            $this->setError('Prepare deleteWorkCategory failed: ' . $this->db->error);
+            return false;
+        }
+
+        $stmt->bind_param('i', $id);
+        $ok = $stmt->execute();
+        if (!$ok) {
+            $this->setError('Execute deleteWorkCategory failed: ' . $stmt->error);
+            $stmt->close();
+            return false;
+        }
+
+        $stmt->close();
+        return true;
+    }
+
+    public function workCategoryTagExists(string $tag, ?int $excludeId = null): bool
+    {
+        if ($excludeId !== null) {
+            $stmt = $this->db->prepare("SELECT id FROM work_categories WHERE tag = ? AND id <> ? LIMIT 1");
+            if (!$stmt) {
+                $this->setError('Prepare workCategoryTagExists failed: ' . $this->db->error);
+                return true;
+            }
+            $stmt->bind_param('si', $tag, $excludeId);
+        } else {
+            $stmt = $this->db->prepare("SELECT id FROM work_categories WHERE tag = ? LIMIT 1");
+            if (!$stmt) {
+                $this->setError('Prepare workCategoryTagExists failed: ' . $this->db->error);
+                return true;
+            }
+            $stmt->bind_param('s', $tag);
+        }
+
+        $ok = $stmt->execute();
+        if (!$ok) {
+            $this->setError('Execute workCategoryTagExists failed: ' . $stmt->error);
+            $stmt->close();
+            return true;
+        }
+
+        $res = $stmt->get_result();
+        $exists = $res && $res->num_rows > 0;
+        $stmt->close();
+
+        return $exists;
+    }
+
+
+    public function replaceWorkCategories(array $categories): bool
+    {
+        $this->db->begin_transaction();
+
+        try {
+            $ok = $this->db->query("DELETE FROM work_categories");
+            if (!$ok) {
+                throw new Exception('delete failed');
+            }
+
+            if (!empty($categories)) {
+                $stmt = $this->db->prepare(
+                    "INSERT INTO work_categories (name, tag, sort_order)
+                     VALUES (?, ?, ?)"
+                );
+                if (!$stmt) {
+                    throw new Exception('prepare failed');
+                }
+
+                foreach ($categories as $c) {
+                    $name = isset($c['name']) ? trim((string) $c['name']) : '';
+                    $tag = isset($c['tag']) ? trim((string) $c['tag']) : '';
+                    $sort = isset($c['sort_order']) ? (int) $c['sort_order'] : 0;
+                    $stmt->bind_param('ssi', $name, $tag, $sort);
+                    if (!$stmt->execute()) {
+                        $stmt->close();
+                        throw new Exception('execute failed');
+                    }
+                }
+
+                $stmt->close();
+            }
+
+            $this->db->commit();
+            return true;
+        } catch (Exception $e) {
+            $this->db->rollback();
+            return false;
+        }
+    }
+
 }

@@ -202,6 +202,30 @@ if ($resource === 'auth') {
         }
     }
 
+    // /api.php/settings/work-categories
+    if ($param1 === 'work-categories' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->workCategoriesIndex();
+        } elseif ($method === 'POST') {
+            $controller->workCategoriesStore();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/settings/work-categories/{id}
+    if ($param1 === 'work-categories' && $param2 !== null && ctype_digit($param2)) {
+        $id = (int) $param2;
+
+        if ($method === 'PUT' || $method === 'PATCH' || $method === 'POST') {
+            $controller->workCategoriesUpdate($id);
+        } elseif ($method === 'DELETE') {
+            $controller->workCategoriesDelete($id);
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
     sendError('NOT_FOUND', 'Маршрут не найден', 404);
 
 } elseif ($resource === 'finance') {
@@ -216,6 +240,34 @@ if ($resource === 'auth') {
     // /api.php/finance/email-open?token=...
     if ($method === 'GET' && $param1 === 'email-open') {
         $controller->emailOpen();
+    }
+
+    // /api.php/finance/invoice-plans
+    if ($param1 === 'invoice-plans' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->invoicePlansIndex();
+        } elseif ($method === 'POST') {
+            $controller->invoicePlansCreate();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/finance/invoice-plans/{id}
+    if ($param1 === 'invoice-plans' && $param2 !== null && ctype_digit($param2)) {
+        $id = (int)$param2;
+
+        if ($method === 'DELETE') {
+            $controller->invoicePlansDelete($id);
+        } elseif (($method === 'PATCH' || $method === 'PUT') && !isset($segments[3])) {
+            $controller->invoicePlansUpdate($id);
+        } elseif ($method === 'POST' && isset($segments[3]) && $segments[3] === 'send') {
+            $controller->invoicePlansSend($id);
+        } elseif ($method === 'POST' && isset($segments[3]) && $segments[3] === 'remind') {
+            $controller->invoicePlansRemind($id);
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
     }
 
     sendError('NOT_FOUND', 'Маршрут не найден', 404);

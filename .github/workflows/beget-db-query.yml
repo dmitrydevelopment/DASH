@@ -1,0 +1,73 @@
+name: Beget DB query runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      sql:
+        description: "SQL to execute on Beget DB"
+        required: true
+        type: string
+      dry_run:
+        description: "Do not execute, print SQL only"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  db-query:
+    runs-on: ubuntu-latest
+    env:
+      BEGET_SSH_HOST: kostyasw.beget.tech
+      BEGET_SSH_USER: kostyasw_dd1
+      BEGET_SSH_PASSWORD: Xiino145314@
+      DB_HOST: localhost
+      DB_NAME: kostyasw_dash
+      DB_USER: kostyasw_dash
+      DB_PASSWORD: BVKV!4Iy
+    steps:
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${BEGET_SSH_HOST}" ]]
+          [[ -n "${BEGET_SSH_USER}" ]]
+          [[ -n "${BEGET_SSH_PASSWORD}" ]]
+          [[ -n "${DB_HOST}" ]]
+          [[ -n "${DB_NAME}" ]]
+          [[ -n "${DB_USER}" ]]
+          [[ -n "${DB_PASSWORD}" ]]
+          SQL_TEXT=$(cat <<'SQL_EOF'
+          ${{ inputs.sql }}
+          SQL_EOF
+          )
+          [ -n "$SQL_TEXT" ]
+
+      - name: Install sshpass
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+
+      - name: Run SQL on Beget via SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          SQL_TEXT=$(cat <<'SQL_EOF'
+          ${{ inputs.sql }}
+          SQL_EOF
+          )
+
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "[DRY-RUN] SQL to execute:"
+            echo "$SQL_TEXT"
+            exit 0
+          fi
+
+          SQL_B64=$(printf '%s' "$SQL_TEXT" | base64 -w0)
+
+          sshpass -p "$BEGET_SSH_PASSWORD" ssh \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            "$BEGET_SSH_USER@$BEGET_SSH_HOST" \
+            "SQL_TEXT=\$(printf '%s' '$SQL_B64' | base64 -d); MYSQL_PWD='$DB_PASSWORD' mysql -h '$DB_HOST' -u '$DB_USER' -D '$DB_NAME' -e \"\$SQL_TEXT\""
+
+          echo "SQL executed successfully"

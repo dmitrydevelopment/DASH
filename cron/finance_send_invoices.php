@@ -87,7 +87,7 @@ $events = new FinanceSendEventModel($db);
 $clientSql = "SELECT id, name, legal_name, inn, kpp, email, additional_email, telegram_id, chat_id,
                     send_invoice_schedule, invoice_use_end_month_date, send_invoice_telegram, send_invoice_diadoc
              FROM clients
-             WHERE is_deleted = 0
+             WHERE is_active = 1
                AND send_invoice_schedule = 1
                AND COALESCE(invoice_use_end_month_date, 0) = ?";
 

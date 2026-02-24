@@ -1,0 +1,43 @@
+name: Deploy to beget after push to main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: beget-deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      BEGET_SSH_HOST: kostyasw.beget.tech
+      BEGET_SSH_USER: kostyasw_dd1
+      BEGET_SSH_PASSWORD: Xiino145314@
+    steps:
+      - name: Validate deploy inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${BEGET_SSH_HOST}" ]] || { echo "BEGET_SSH_HOST is empty"; exit 1; }
+          [[ -n "${BEGET_SSH_USER}" ]] || { echo "BEGET_SSH_USER is empty"; exit 1; }
+          [[ -n "${BEGET_SSH_PASSWORD}" ]] || { echo "BEGET_SSH_PASSWORD is empty"; exit 1; }
+
+      - name: Run deploy command over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ env.BEGET_SSH_HOST }}
+          username: ${{ env.BEGET_SSH_USER }}
+          password: ${{ env.BEGET_SSH_PASSWORD }}
+          script_stop: true
+          command_timeout: 20m
+          script: |
+            set -e
+            cd ~/dash.k-sud.com/public_html
+            git fetch --prune origin
+            git checkout main
+            git reset --hard origin/main
+            git clean -fd

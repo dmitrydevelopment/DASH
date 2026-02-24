@@ -38,16 +38,34 @@ class Auth
     }
 
     /**
-     * Требует конкретную роль, иначе отдает 403 и завершает выполнение.
+     * Требует роль(и), иначе отдает 403 и завершает выполнение.
      *
-     * @param string $role
+     * @param string|array $role
      * @return array
      */
     public static function requireRole($role)
     {
         $user = self::requireAuth();
+        $currentRole = strtolower((string)($user['role'] ?? ''));
 
-        if ($user['role'] !== $role) {
+        if (is_array($role)) {
+            $allowedRoles = array_map(function ($item) {
+                return strtolower((string)$item);
+            }, $role);
+
+            // Совместимость со старыми вызовами ['admin', 'owner'] на базах,
+            // где у обычных сотрудников роль хранится как 'employee'.
+            if ($currentRole === 'employee' && in_array('owner', $allowedRoles, true)) {
+                return $user;
+            }
+
+            if (!in_array($currentRole, $allowedRoles, true)) {
+                sendError('FORBIDDEN', 'Недостаточно прав', 403);
+            }
+            return $user;
+        }
+
+        if ($currentRole !== strtolower((string)$role)) {
             sendError('FORBIDDEN', 'Недостаточно прав', 403);
         }
 

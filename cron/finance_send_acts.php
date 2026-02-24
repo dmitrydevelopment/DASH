@@ -82,7 +82,7 @@ $events = new FinanceSendEventModel($db);
 $clientSql = "SELECT id, name, legal_name, inn, kpp, email, additional_email, telegram_id, chat_id,
                     send_act_schedule, send_act_telegram, send_act_diadoc
              FROM clients
-             WHERE is_deleted = 0
+             WHERE is_active = 1
                AND send_act_schedule = 1";
 
 $res = $db->query($clientSql);

@@ -4,6 +4,7 @@ class FinanceDocumentModel
 {
     private $db;
     private $columnsCache = null;
+    private $downloadColumnsCache = null;
 
     public function __construct(mysqli $db)
     {
@@ -143,14 +144,65 @@ class FinanceDocumentModel
             return;
         }
 
-        $stmt = $this->db->prepare("INSERT INTO finance_download_events (document_id, ip, user_agent, created_at) VALUES (?, ?, ?, ?)");
-        $createdAt = date('Y-m-d H:i:s');
-        $documentId = (int) $documentId;
-        $ip = substr((string) $ip, 0, 191);
-        $ua = substr((string) $ua, 0, 500);
-        $stmt->bind_param("isss", $documentId, $ip, $ua, $createdAt);
+        $cols = $this->getDownloadEventColumns();
+        if (empty($cols)) {
+            return;
+        }
+
+        $fields = [];
+        $values = [];
+        $types = '';
+
+        $append = function ($field, $type, $value) use (&$fields, &$values, &$types, $cols) {
+            if (!isset($cols[$field])) {
+                return;
+            }
+            $fields[] = $field;
+            $values[] = $value;
+            $types .= $type;
+        };
+
+        $append('document_id', 'i', (int)$documentId);
+        $append('ip', 's', substr((string)$ip, 0, 191));
+        $append('user_agent', 's', substr((string)$ua, 0, 500));
+
+        if (isset($cols['created_at'])) {
+            $append('created_at', 's', date('Y-m-d H:i:s'));
+        }
+
+        if (empty($fields)) {
+            return;
+        }
+
+        $placeholders = implode(',', array_fill(0, count($fields), '?'));
+        $sql = 'INSERT INTO finance_download_events (' . implode(',', $fields) . ') VALUES (' . $placeholders . ')';
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            return;
+        }
+
+        $this->bindParams($stmt, $types, $values);
         $stmt->execute();
         $stmt->close();
+    }
+
+    private function getDownloadEventColumns()
+    {
+        if ($this->downloadColumnsCache !== null) {
+            return $this->downloadColumnsCache;
+        }
+
+        $cols = [];
+        $res = $this->db->query('SHOW COLUMNS FROM finance_download_events');
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $cols[(string)$row['Field']] = true;
+            }
+            $res->close();
+        }
+
+        $this->downloadColumnsCache = $cols;
+        return $cols;
     }
 
     private function getColumns()

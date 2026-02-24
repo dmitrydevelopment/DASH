@@ -741,7 +741,7 @@ select.form-control {
 
 @font-face {
   font-family: 'FKGroteskNeue';
-  src: url('https://r2cdn.perplexity.ai/fonts/FKGroteskNeue.woff2')
+  src: url('/public_html/assets/fonts/FKGroteskNeue.woff2')
     format('woff2');
 }
 
@@ -1485,6 +1485,18 @@ body {
   margin-top: var(--space-4);
 }
 
+
+.kanban-add-btn {
+  position: absolute;
+  top: 50%;
+  right: var(--space-12);
+  transform: translateY(-50%);
+}
+
+.column-header .count {
+  margin-top: var(--space-6);
+}
+
 .add-project-btn {
   position: absolute;
   top: var(--space-8);
@@ -1737,6 +1749,50 @@ body {
   font-size: var(--font-size-sm);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.clients-name-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clients-name-search-trigger {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  font-size: 14px;
+}
+
+.clients-name-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.clients-name-search__input {
+  width: 180px;
+  padding: 6px 8px;
+  background: var(--glass-bg-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.clients-name-search__close {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
 }
 
 .data-table tbody tr {
@@ -4628,4 +4684,125 @@ select   {
   padding: var(--space-6) var(--space-10);
   color: var(--color-text);
   font-size: var(--font-size-sm);
+}
+
+.kanban-board--compact {
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
+}
+
+.plan-lines {
+  margin: 8px 0;
+  padding-left: 16px;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.kanban-card-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.kanban-card-actions .action-btn {
+  font-size: var(--font-size-xs);
+}
+
+.kanban-drop-target {
+  outline: 2px dashed #3b82f6;
+  outline-offset: -4px;
+  border-radius: 10px;
+}
+
+.invoice-plan-lines-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.invoice-plan-line-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--space-10);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-base);
+  background: var(--glass-bg-1);
+}
+
+.invoice-plan-line-row input,
+.invoice-plan-line-row select {
+  width: 100%;
+}
+
+.invoice-plan-line-row__main {
+  width: 100%;
+}
+
+.invoice-plan-line-row__sub {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.invoice-plan-line-remove {
+  min-width: 36px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.invoice-plan-line-remove[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#invoicePlanSendModal input[type="checkbox"] {
+  width: 40px;
+}
+
+.invoice-plan-line-amount::-webkit-outer-spin-button,
+.invoice-plan-line-amount::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.invoice-plan-line-amount {
+  -moz-appearance: textfield;
+}
+
+.invoice-plan-client-title {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.invoice-plan-inline-checkbox {
+  display: flex;
+  align-items: flex-end;
+}
+
+.invoice-plan-inline-checkbox label {
+  margin-bottom: 8px;
+}
+
+.invoice-plan-doc-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.invoice-plan-doc-link {
+  color: var(--color-info);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+
+.invoice-plan-doc-link:hover {
+  text-decoration: underline;
 }

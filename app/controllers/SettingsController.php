@@ -17,7 +17,7 @@ class SettingsController
 
     public function show()
     {
-        Auth::requireRole('admin');
+        $this->requireSettingsAccess();
 
         $settings = $this->settings->get();
         $err = $this->settings->getLastError();
@@ -26,22 +26,25 @@ class SettingsController
         }
 
         $roles = $this->settings->getRoles();
+        $workCategories = $this->settings->getWorkCategories();
 
         sendJson([
             'success' => true,
             'data' => [
                 'settings' => $settings,
-                'roles' => $roles
+                'roles' => $roles,
+                'work_categories' => $workCategories
             ]
         ]);
     }
 
     public function save()
     {
-        Auth::requireRole('admin');
+        $this->requireSettingsAccess();
 
         $payload = getJsonPayload();
         $rolesPayload = (isset($payload['roles']) && is_array($payload['roles'])) ? $payload['roles'] : [];
+        $workCategoriesPayload = (isset($payload['work_categories']) && is_array($payload['work_categories'])) ? $payload['work_categories'] : [];
 
         $roles = [];
         $sort = 0;
@@ -70,6 +73,37 @@ class SettingsController
                 'sort_order' => $sort
             ];
             $sort++;
+        }
+
+
+
+        $workCategories = [];
+        $workCategorySort = 0;
+
+        foreach ($workCategoriesPayload as $c) {
+            $name = isset($c['name']) ? trim((string) $c['name']) : '';
+            $tag = isset($c['tag']) ? trim((string) $c['tag']) : '';
+
+            if ($name === '' && $tag === '') {
+                continue;
+            }
+
+            if ($name === '' || $tag === '') {
+                sendError('VALIDATION_ERROR', 'Категория и тег категории должны быть заполнены.');
+            }
+
+            $tag = mb_strtolower($tag);
+
+            if (!preg_match('/^[a-z0-9_-]+$/', $tag)) {
+                sendError('VALIDATION_ERROR', 'Тег категории: только латиница, цифры, "_" и "-".');
+            }
+
+            $workCategories[] = [
+                'name' => $name,
+                'tag' => $tag,
+                'sort_order' => $workCategorySort,
+            ];
+            $workCategorySort++;
         }
 
         $hour = isset($payload['scheduler_start_hour']) ? (int) $payload['scheduler_start_hour'] : 9;
@@ -134,6 +168,11 @@ class SettingsController
             sendError('SERVER_ERROR', 'Не удалось сохранить роли сотрудников', 500);
         }
 
+        $okWorkCategories = $this->settings->replaceWorkCategories($workCategories);
+        if (!$okWorkCategories) {
+            sendError('SERVER_ERROR', 'Не удалось сохранить категории работ', 500);
+        }
+
         $settings = $this->settings->get();
         $err = $this->settings->getLastError();
         if ($err !== '') {
@@ -148,4 +187,115 @@ class SettingsController
             ]
         ]);
     }
+
+    public function workCategoriesIndex()
+    {
+        $this->requireSettingsAccess();
+
+        sendJson([
+            'success' => true,
+            'data' => [
+                'work_categories' => $this->settings->getWorkCategories()
+            ]
+        ]);
+    }
+
+    public function workCategoriesStore()
+    {
+        $this->requireSettingsAccess();
+
+        $payload = getJsonPayload();
+        [$name, $tag, $sortOrder] = $this->normalizeWorkCategoryPayload($payload);
+
+        if ($this->settings->workCategoryTagExists($tag)) {
+            sendError('VALIDATION_ERROR', 'Тег уже используется.');
+        }
+
+        $id = $this->settings->createWorkCategory($name, $tag, $sortOrder);
+        if ($id === null) {
+            sendError('DB_ERROR', $this->settings->getLastError(), 500);
+        }
+
+        sendJson([
+            'success' => true,
+            'data' => [
+                'id' => $id,
+                'work_categories' => $this->settings->getWorkCategories()
+            ]
+        ]);
+    }
+
+    public function workCategoriesUpdate(int $id)
+    {
+        $this->requireSettingsAccess();
+
+        $payload = getJsonPayload();
+        [$name, $tag, $sortOrder] = $this->normalizeWorkCategoryPayload($payload);
+
+        if ($this->settings->workCategoryTagExists($tag, $id)) {
+            sendError('VALIDATION_ERROR', 'Тег уже используется.');
+        }
+
+        $ok = $this->settings->updateWorkCategory($id, $name, $tag, $sortOrder);
+        if (!$ok) {
+            sendError('DB_ERROR', $this->settings->getLastError(), 500);
+        }
+
+        sendJson([
+            'success' => true,
+            'data' => [
+                'work_categories' => $this->settings->getWorkCategories()
+            ]
+        ]);
+    }
+
+    public function workCategoriesDelete(int $id)
+    {
+        $this->requireSettingsAccess();
+
+        $ok = $this->settings->deleteWorkCategory($id);
+        if (!$ok) {
+            sendError('DB_ERROR', $this->settings->getLastError(), 500);
+        }
+
+        sendJson([
+            'success' => true,
+            'data' => [
+                'work_categories' => $this->settings->getWorkCategories()
+            ]
+        ]);
+    }
+
+    private function requireSettingsAccess(): array
+    {
+        $user = Auth::requireAuth();
+        $role = isset($user['role']) ? (string) $user['role'] : '';
+        if ($role !== 'admin' && $role !== 'owner') {
+            sendError('FORBIDDEN', 'Недостаточно прав', 403);
+        }
+
+        return $user;
+    }
+
+    private function normalizeWorkCategoryPayload(array $payload): array
+    {
+        $name = trim((string) ($payload['name'] ?? ''));
+        $tag = mb_strtolower(trim((string) ($payload['tag'] ?? '')));
+        $sortOrder = isset($payload['sort_order']) ? (int) $payload['sort_order'] : 100;
+
+        if ($name === '') {
+            sendError('VALIDATION_ERROR', 'Название категории обязательно.');
+        }
+
+        if ($tag === '') {
+            sendError('VALIDATION_ERROR', 'Тег категории обязателен.');
+        }
+
+        if (!preg_match('/^[a-z0-9_-]+$/', $tag)) {
+            sendError('VALIDATION_ERROR', 'Тег: только латиница, цифры, "_" и "-".');
+        }
+
+        return [$name, $tag, $sortOrder];
+    }
+
 }
