@@ -237,16 +237,12 @@ let statusBoardState = {
   meta: {}
 };
 let actsBootstrapLoading = false;
-let projectModalState = {
-  selectedClientId: null
-};
 
 async function initKanbanBoard() {
   await loadStatusBoard();
   bindInvoicePlanDnD();
   bindInvoicePlanModalActions();
   bindStatusActions();
-  bindProjectModalActions();
 }
 
 
@@ -438,7 +434,7 @@ function createProjectCard(item) {
     <div class="amount">${formatCurrency(Number(item.amount || 0))}</div>
     <div class="status status--${isReady ? 'warning' : 'info'}">${isReady ? 'Можно выставлять счет' : 'В работе'}</div>
     <div class="kanban-card-actions">
-      ${actionable && !isReady ? `<button type="button" class="action-btn action-btn--edit" onclick="markProjectReady(${projectId})">Готов к счету</button>` : ''}
+      ${actionable && !isReady ? `<button type="button" class="action-btn action-btn--edit" onclick="markProjectReady(${projectId})">Можно выставлять счет</button>` : ''}
       ${actionable && isReady ? `<button type="button" class="action-btn action-btn--edit" onclick="invoiceProject(${projectId})">Выставить счет</button>` : ''}
     </div>
   `;
@@ -612,7 +608,36 @@ function bindInvoicePlanModalActions() {
     let createdPlanId = 0;
 
     try {
-      if (mode === 'create') {
+      if (mode === 'project_create') {
+        const clientId = Number(invoicePlanState.selectedClientId || 0);
+        if (!clientId) {
+          showToast('Выберите клиента', 'error');
+          return;
+        }
+        if (!Array.isArray(payload.items_snapshot) || payload.items_snapshot.length === 0) {
+          showToast('Добавьте минимум одну строку работ', 'error');
+          return;
+        }
+        const total = payload.items_snapshot.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+        if (!Number.isFinite(total) || total <= 0) {
+          showToast('Сумма проекта должна быть больше 0', 'error');
+          return;
+        }
+        const projectName = String(payload.items_snapshot[0]?.name || '').trim() || 'Проект';
+        const resp = await fetch('/api.php/finance/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            client_id: clientId,
+            name: projectName,
+            amount: total,
+            work_items: payload.items_snapshot
+          })
+        });
+        if (!resp.ok) throw new Error('create project failed');
+        showToast('Проект добавлен', 'success');
+      } else if (mode === 'create') {
         const clientId = Number(invoicePlanState.selectedClientId || 0);
         if (!clientId) {
           showToast('Выберите клиента', 'error');
@@ -766,14 +791,24 @@ function renderInvoicePlanModalMeta(mode, plan) {
   const submitBtn = document.getElementById('invoicePlanSendSubmitBtn');
   const docsWrap = document.getElementById('invoicePlanDocLinks');
   const docsBody = document.getElementById('invoicePlanDocLinksBody');
+  const dateRow = document.getElementById('invoicePlanSendDate')?.closest('.form-row');
 
   if (modeInput) modeInput.value = mode;
-  if (mode === 'create') {
+  if (mode === 'project_create') {
+    if (title) title.textContent = 'Добавить проект';
+    if (titleWrap) titleWrap.style.display = 'none';
+    if (searchWrap) searchWrap.style.display = '';
+    if (submitBtn) submitBtn.textContent = 'Сохранить';
+    if (docsWrap) docsWrap.style.display = 'none';
+    if (dateRow) dateRow.style.display = 'none';
+    invoicePlanState.selectedClientId = null;
+  } else if (mode === 'create') {
     if (title) title.textContent = 'Добавить счет к выставлению';
     if (titleWrap) titleWrap.style.display = 'none';
     if (searchWrap) searchWrap.style.display = '';
     if (submitBtn) submitBtn.textContent = 'Сохранить';
     if (docsWrap) docsWrap.style.display = 'none';
+    if (dateRow) dateRow.style.display = '';
     invoicePlanState.selectedClientId = null;
   } else if (mode === 'edit') {
     if (title) title.textContent = 'Редактировать счет';
@@ -781,12 +816,14 @@ function renderInvoicePlanModalMeta(mode, plan) {
     if (searchWrap) searchWrap.style.display = 'none';
     if (titleEl) titleEl.textContent = plan?.client_name || '—';
     if (submitBtn) submitBtn.textContent = 'Сохранить';
+    if (dateRow) dateRow.style.display = '';
   } else {
     if (title) title.textContent = 'Подтверждение выставления счета';
     if (titleWrap) titleWrap.style.display = '';
     if (searchWrap) searchWrap.style.display = 'none';
     if (titleEl) titleEl.textContent = plan?.client_name || '—';
     if (submitBtn) submitBtn.textContent = 'Выставить счет';
+    if (dateRow) dateRow.style.display = '';
   }
 
   if (docsWrap && docsBody) {
@@ -959,9 +996,10 @@ async function deleteInvoicePlan(planId) {
 }
 
 async function openProjectQuickCreate() {
-  const modal = document.getElementById('projectCreateModal');
+  const modal = document.getElementById('invoicePlanSendModal');
   if (!modal) return;
 
+  await ensureInvoicePlanWorkCategories();
   await ensureInvoicePlanClients(true);
   const clients = getInvoicePlanClientsSource();
   if (!Array.isArray(clients) || clients.length === 0) {
@@ -969,134 +1007,30 @@ async function openProjectQuickCreate() {
     return;
   }
 
-  projectModalState.selectedClientId = null;
-  const form = document.getElementById('projectCreateForm');
-  form?.reset();
-  const search = document.getElementById('projectClientSearch');
-  if (search) search.value = '';
-  renderProjectClientSuggestions('');
+  invoicePlanState.mode = 'project_create';
+  invoicePlanState.currentPlan = null;
+  invoicePlanState.selectedClientId = null;
+
+  const idInput = document.getElementById('invoicePlanSendPlanId');
+  const emailInput = document.getElementById('invoicePlanSendEmail');
+  const telegramInput = document.getElementById('invoicePlanSendTelegram');
+  const diadocInput = document.getElementById('invoicePlanSendDiadoc');
+  const sendNowInput = document.getElementById('invoicePlanSendNow');
+  const dateInput = document.getElementById('invoicePlanSendDate');
+  const clientSearch = document.getElementById('invoicePlanClientSearch');
+
+  if (idInput) idInput.value = '';
+  if (emailInput) emailInput.value = '';
+  if (telegramInput) telegramInput.checked = false;
+  if (diadocInput) diadocInput.checked = false;
+  if (sendNowInput) sendNowInput.checked = false;
+  if (dateInput) dateInput.value = '';
+  if (clientSearch) clientSearch.value = '';
+
+  renderInvoicePlanModalMeta('project_create', null);
+  renderInvoicePlanLinesRows([]);
+  renderInvoicePlanClientSuggestions('');
   modal.classList.add('active');
-}
-
-function bindProjectModalActions() {
-  const modal = document.getElementById('projectCreateModal');
-  if (!modal || modal.dataset.bind === '1') return;
-  modal.dataset.bind = '1';
-
-  const closeBtn = document.getElementById('projectCreateClose');
-  const cancelBtn = document.getElementById('projectCreateCancel');
-  const form = document.getElementById('projectCreateForm');
-  const search = document.getElementById('projectClientSearch');
-
-  const close = () => {
-    modal.classList.remove('active');
-    projectModalState.selectedClientId = null;
-    form?.reset();
-    renderProjectClientSuggestions('');
-  };
-
-  closeBtn?.addEventListener('click', close);
-  cancelBtn?.addEventListener('click', close);
-
-  modal.addEventListener('click', (e) => {
-    const target = e.target;
-    const item = target && target.closest ? target.closest('.project-client-item') : null;
-    if (!item) return;
-    const clientId = Number(item.dataset.clientId || 0);
-    selectProjectClient(clientId);
-    renderProjectClientSuggestions('');
-  });
-
-  search?.addEventListener('input', async () => {
-    await ensureInvoicePlanClients(true);
-    renderProjectClientSuggestions(search.value || '');
-  });
-
-  search?.addEventListener('focus', async () => {
-    await ensureInvoicePlanClients(true);
-    renderProjectClientSuggestions(search.value || '');
-  });
-
-  form?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const clientId = Number(projectModalState.selectedClientId || 0);
-    const projectName = document.getElementById('projectNameInput')?.value?.trim() || '';
-    const amount = Number((document.getElementById('projectAmountInput')?.value || '0').replace(',', '.'));
-
-    if (!clientId) {
-      showToast('Выберите клиента из списка', 'error');
-      return;
-    }
-    if (!projectName) {
-      showToast('Укажите название проекта', 'error');
-      return;
-    }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      showToast('Укажите корректную сумму', 'error');
-      return;
-    }
-
-    try {
-      const resp = await fetch('/api.php/finance/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({
-          client_id: clientId,
-          name: projectName,
-          amount: amount,
-          work_items: [{ name: projectName, amount: amount, category: '' }]
-        })
-      });
-      if (!resp.ok) throw new Error('create project failed');
-      showToast('Проект добавлен', 'success');
-      close();
-      await loadStatusBoard();
-    } catch (err) {
-      console.error(err);
-      showToast('Не удалось добавить проект', 'error');
-    }
-  });
-}
-
-function renderProjectClientSuggestions(query) {
-  const box = document.getElementById('projectClientSearchSuggestions');
-  if (!box) return;
-  const value = String(query || '').trim().toLowerCase();
-
-  const source = getInvoicePlanClientsSource();
-  if (!source.length) {
-    box.style.display = 'none';
-    box.innerHTML = '';
-    return;
-  }
-
-  const candidates = value.length === 0
-    ? []
-    : source.filter((c) => normalizeClientNameForSearch(c.name).startsWith(value)).slice(0, 10);
-
-  if (!candidates.length) {
-    box.style.display = 'none';
-    box.innerHTML = '';
-    return;
-  }
-
-  box.innerHTML = candidates.map((c) => `
-    <div class="dadata-suggestion-item project-client-item" data-client-id="${Number(c.id || 0)}">
-      <span class="dadata-suggestion-title">${escapeHtml(c.name || '')}</span>
-      <span class="dadata-suggestion-subtitle">${escapeHtml(c.email || 'Без email')}</span>
-    </div>
-  `).join('');
-  box.style.display = 'block';
-}
-
-function selectProjectClient(clientId) {
-  const client = getInvoicePlanClientsSource().find((c) => Number(c.id) === Number(clientId));
-  if (!client) return;
-  projectModalState.selectedClientId = Number(client.id);
-  const search = document.getElementById('projectClientSearch');
-  if (search) search.value = client.name || '';
 }
 
 async function markProjectReady(projectId) {
