@@ -16,13 +16,18 @@ class FinanceProjectModel
                 INNER JOIN clients c ON c.id = fp.client_id
                 ORDER BY fp.created_at DESC, fp.id DESC";
         $res = $this->db->query($sql);
-        $rows = [];
-        if ($res) {
-            while ($row = $res->fetch_assoc()) {
-                $rows[] = $row;
+        if ($res === false) {
+            // Allow status board to work before sprint patch is applied.
+            if ((int)$this->db->errno === 1146) {
+                return [];
             }
-            $res->close();
+            return [];
         }
+        $rows = [];
+        while ($row = $res->fetch_assoc()) {
+            $rows[] = $row;
+        }
+        $res->close();
         return $rows;
     }
 

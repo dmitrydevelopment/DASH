@@ -1428,7 +1428,7 @@ body {
 
 .kanban-board {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-20);
 }
 
@@ -4701,7 +4701,21 @@ select   {
 }
 
 .kanban-board--compact {
-  grid-template-columns: repeat(2, minmax(320px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1400px) {
+  .kanban-board,
+  .kanban-board--compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .kanban-board,
+  .kanban-board--compact {
+    grid-template-columns: 1fr;
+  }
 }
 
 .plan-lines {
