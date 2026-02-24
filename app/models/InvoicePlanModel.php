@@ -65,6 +65,25 @@ class InvoicePlanModel
         return $row ?: null;
     }
 
+    public function findByClientPeriod($clientId, $periodYear, $periodMonth)
+    {
+        $stmt = $this->db->prepare("SELECT ip.*, c.name AS client_name, c.email, c.chat_id, c.diadoc_box_id, c.send_invoice_telegram, c.send_invoice_diadoc,
+                                           c.send_invoice_schedule, c.invoice_use_end_month_date
+                                    FROM invoice_plans ip
+                                    INNER JOIN clients c ON c.id = ip.client_id
+                                    WHERE ip.client_id = ? AND ip.period_year = ? AND ip.period_month = ?
+                                    LIMIT 1");
+        if (!$stmt) {
+            return null;
+        }
+        $stmt->bind_param('iii', $clientId, $periodYear, $periodMonth);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res ? $res->fetch_assoc() : null;
+        $stmt->close();
+        return $row ?: null;
+    }
+
     private function getInvoicePlanColumns()
     {
         if ($this->invoicePlanColumns !== null) {
