@@ -237,12 +237,16 @@ let statusBoardState = {
   meta: {}
 };
 let actsBootstrapLoading = false;
+let projectModalState = {
+  selectedClientId: null
+};
 
 async function initKanbanBoard() {
   await loadStatusBoard();
   bindInvoicePlanDnD();
   bindInvoicePlanModalActions();
   bindStatusActions();
+  bindProjectModalActions();
 }
 
 
@@ -955,6 +959,9 @@ async function deleteInvoicePlan(planId) {
 }
 
 async function openProjectQuickCreate() {
+  const modal = document.getElementById('projectCreateModal');
+  if (!modal) return;
+
   await ensureInvoicePlanClients(true);
   const clients = getInvoicePlanClientsSource();
   if (!Array.isArray(clients) || clients.length === 0) {
@@ -962,43 +969,134 @@ async function openProjectQuickCreate() {
     return;
   }
 
-  const clientName = prompt('Клиент (название):', clients[0]?.name || '');
-  if (!clientName) return;
-  const client = clients.find((c) => String(c.name || '').toLowerCase() === String(clientName).toLowerCase())
-    || clients.find((c) => String(c.name || '').toLowerCase().includes(String(clientName).toLowerCase()));
-  if (!client) {
-    showToast('Клиент не найден', 'error');
+  projectModalState.selectedClientId = null;
+  const form = document.getElementById('projectCreateForm');
+  form?.reset();
+  const search = document.getElementById('projectClientSearch');
+  if (search) search.value = '';
+  renderProjectClientSuggestions('');
+  modal.classList.add('active');
+}
+
+function bindProjectModalActions() {
+  const modal = document.getElementById('projectCreateModal');
+  if (!modal || modal.dataset.bind === '1') return;
+  modal.dataset.bind = '1';
+
+  const closeBtn = document.getElementById('projectCreateClose');
+  const cancelBtn = document.getElementById('projectCreateCancel');
+  const form = document.getElementById('projectCreateForm');
+  const search = document.getElementById('projectClientSearch');
+
+  const close = () => {
+    modal.classList.remove('active');
+    projectModalState.selectedClientId = null;
+    form?.reset();
+    renderProjectClientSuggestions('');
+  };
+
+  closeBtn?.addEventListener('click', close);
+  cancelBtn?.addEventListener('click', close);
+
+  modal.addEventListener('click', (e) => {
+    const target = e.target;
+    const item = target && target.closest ? target.closest('.project-client-item') : null;
+    if (!item) return;
+    const clientId = Number(item.dataset.clientId || 0);
+    selectProjectClient(clientId);
+    renderProjectClientSuggestions('');
+  });
+
+  search?.addEventListener('input', async () => {
+    await ensureInvoicePlanClients(true);
+    renderProjectClientSuggestions(search.value || '');
+  });
+
+  search?.addEventListener('focus', async () => {
+    await ensureInvoicePlanClients(true);
+    renderProjectClientSuggestions(search.value || '');
+  });
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const clientId = Number(projectModalState.selectedClientId || 0);
+    const projectName = document.getElementById('projectNameInput')?.value?.trim() || '';
+    const amount = Number((document.getElementById('projectAmountInput')?.value || '0').replace(',', '.'));
+
+    if (!clientId) {
+      showToast('Выберите клиента из списка', 'error');
+      return;
+    }
+    if (!projectName) {
+      showToast('Укажите название проекта', 'error');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showToast('Укажите корректную сумму', 'error');
+      return;
+    }
+
+    try {
+      const resp = await fetch('/api.php/finance/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          client_id: clientId,
+          name: projectName,
+          amount: amount,
+          work_items: [{ name: projectName, amount: amount, category: '' }]
+        })
+      });
+      if (!resp.ok) throw new Error('create project failed');
+      showToast('Проект добавлен', 'success');
+      close();
+      await loadStatusBoard();
+    } catch (err) {
+      console.error(err);
+      showToast('Не удалось добавить проект', 'error');
+    }
+  });
+}
+
+function renderProjectClientSuggestions(query) {
+  const box = document.getElementById('projectClientSearchSuggestions');
+  if (!box) return;
+  const value = String(query || '').trim().toLowerCase();
+
+  const source = getInvoicePlanClientsSource();
+  if (!source.length) {
+    box.style.display = 'none';
+    box.innerHTML = '';
     return;
   }
 
-  const projectName = prompt('Название проекта:', '');
-  if (!projectName) return;
-  const amountRaw = prompt('Сумма проекта, руб:', '');
-  const amount = Number(String(amountRaw || '').replace(',', '.'));
-  if (!Number.isFinite(amount) || amount <= 0) {
-    showToast('Некорректная сумма', 'error');
+  const candidates = value.length === 0
+    ? []
+    : source.filter((c) => normalizeClientNameForSearch(c.name).startsWith(value)).slice(0, 10);
+
+  if (!candidates.length) {
+    box.style.display = 'none';
+    box.innerHTML = '';
     return;
   }
 
-  try {
-    const resp = await fetch('/api.php/finance/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify({
-        client_id: Number(client.id),
-        name: projectName,
-        amount: amount,
-        work_items: [{ name: projectName, amount: amount, category: '' }]
-      })
-    });
-    if (!resp.ok) throw new Error('create project failed');
-    showToast('Проект добавлен', 'success');
-    await loadStatusBoard();
-  } catch (err) {
-    console.error(err);
-    showToast('Не удалось добавить проект', 'error');
-  }
+  box.innerHTML = candidates.map((c) => `
+    <div class="dadata-suggestion-item project-client-item" data-client-id="${Number(c.id || 0)}">
+      <span class="dadata-suggestion-title">${escapeHtml(c.name || '')}</span>
+      <span class="dadata-suggestion-subtitle">${escapeHtml(c.email || 'Без email')}</span>
+    </div>
+  `).join('');
+  box.style.display = 'block';
+}
+
+function selectProjectClient(clientId) {
+  const client = getInvoicePlanClientsSource().find((c) => Number(c.id) === Number(clientId));
+  if (!client) return;
+  projectModalState.selectedClientId = Number(client.id);
+  const search = document.getElementById('projectClientSearch');
+  if (search) search.value = client.name || '';
 }
 
 async function markProjectReady(projectId) {
