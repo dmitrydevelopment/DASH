@@ -483,4 +483,85 @@ class SettingsModel
         }
     }
 
+    public function getProjectStatuses(): array
+    {
+        $res = $this->db->query(
+            "SELECT id, code, name, sort_order, is_active
+             FROM finance_project_statuses
+             ORDER BY sort_order ASC, id ASC"
+        );
+
+        if ($res === false) {
+            if ((int)$this->db->errno === 1146) {
+                return [];
+            }
+            return [];
+        }
+
+        $out = [];
+        while ($row = $res->fetch_assoc()) {
+            $out[] = [
+                'id' => (int)$row['id'],
+                'code' => (string)$row['code'],
+                'name' => (string)$row['name'],
+                'sort_order' => (int)$row['sort_order'],
+                'is_active' => (int)$row['is_active'],
+            ];
+        }
+        $res->close();
+
+        return $out;
+    }
+
+    public function replaceProjectStatuses(array $statuses): bool
+    {
+        $check = $this->db->query("SELECT 1 FROM finance_project_statuses LIMIT 1");
+        if ($check === false && (int)$this->db->errno === 1146) {
+            return true;
+        }
+        if ($check instanceof mysqli_result) {
+            $check->close();
+        }
+
+        $this->db->begin_transaction();
+
+        try {
+            $ok = $this->db->query("DELETE FROM finance_project_statuses");
+            if (!$ok) {
+                throw new Exception('delete failed');
+            }
+
+            if (!empty($statuses)) {
+                $stmt = $this->db->prepare(
+                    "INSERT INTO finance_project_statuses (code, name, sort_order, is_active)
+                     VALUES (?, ?, ?, ?)"
+                );
+                if (!$stmt) {
+                    throw new Exception('prepare failed');
+                }
+
+                foreach ($statuses as $s) {
+                    $code = isset($s['code']) ? trim((string)$s['code']) : '';
+                    $name = isset($s['name']) ? trim((string)$s['name']) : '';
+                    $sort = isset($s['sort_order']) ? (int)$s['sort_order'] : 0;
+                    $active = isset($s['is_active']) ? (int)$s['is_active'] : 1;
+
+                    $stmt->bind_param('ssii', $code, $name, $sort, $active);
+                    if (!$stmt->execute()) {
+                        $stmt->close();
+                        throw new Exception('execute failed');
+                    }
+                }
+
+                $stmt->close();
+            }
+
+            $this->db->commit();
+            return true;
+        } catch (Exception $e) {
+            $this->db->rollback();
+            return false;
+        }
+    }
+
 }

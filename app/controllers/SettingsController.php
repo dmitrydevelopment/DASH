@@ -27,13 +27,15 @@ class SettingsController
 
         $roles = $this->settings->getRoles();
         $workCategories = $this->settings->getWorkCategories();
+        $projectStatuses = $this->settings->getProjectStatuses();
 
         sendJson([
             'success' => true,
             'data' => [
                 'settings' => $settings,
                 'roles' => $roles,
-                'work_categories' => $workCategories
+                'work_categories' => $workCategories,
+                'project_statuses' => $projectStatuses
             ]
         ]);
     }
@@ -45,6 +47,7 @@ class SettingsController
         $payload = getJsonPayload();
         $rolesPayload = (isset($payload['roles']) && is_array($payload['roles'])) ? $payload['roles'] : [];
         $workCategoriesPayload = (isset($payload['work_categories']) && is_array($payload['work_categories'])) ? $payload['work_categories'] : [];
+        $projectStatusesPayload = (isset($payload['project_statuses']) && is_array($payload['project_statuses'])) ? $payload['project_statuses'] : [];
 
         $roles = [];
         $sort = 0;
@@ -104,6 +107,30 @@ class SettingsController
                 'sort_order' => $workCategorySort,
             ];
             $workCategorySort++;
+        }
+
+        $projectStatuses = [];
+        $projectStatusSort = 0;
+        foreach ($projectStatusesPayload as $s) {
+            $name = isset($s['name']) ? trim((string)$s['name']) : '';
+            $code = isset($s['code']) ? trim((string)$s['code']) : '';
+            if ($name === '' && $code === '') {
+                continue;
+            }
+            if ($name === '' || $code === '') {
+                sendError('VALIDATION_ERROR', 'Статус проекта и код должны быть заполнены.');
+            }
+            $code = mb_strtolower($code);
+            if (!preg_match('/^[a-z0-9_-]+$/', $code)) {
+                sendError('VALIDATION_ERROR', 'Код статуса проекта: только латиница, цифры, "_" и "-".');
+            }
+            $projectStatuses[] = [
+                'name' => $name,
+                'code' => $code,
+                'sort_order' => $projectStatusSort,
+                'is_active' => 1
+            ];
+            $projectStatusSort++;
         }
 
         $hour = isset($payload['scheduler_start_hour']) ? (int) $payload['scheduler_start_hour'] : 9;
@@ -172,6 +199,10 @@ class SettingsController
         if (!$okWorkCategories) {
             sendError('SERVER_ERROR', 'Не удалось сохранить категории работ', 500);
         }
+        $okProjectStatuses = $this->settings->replaceProjectStatuses($projectStatuses);
+        if (!$okProjectStatuses) {
+            sendError('SERVER_ERROR', 'Не удалось сохранить статусы проектов', 500);
+        }
 
         $settings = $this->settings->get();
         $err = $this->settings->getLastError();
@@ -183,7 +214,9 @@ class SettingsController
             'success' => true,
             'data' => [
                 'settings' => $settings,
-                'roles' => $this->settings->getRoles()
+                'roles' => $this->settings->getRoles(),
+                'work_categories' => $this->settings->getWorkCategories(),
+                'project_statuses' => $this->settings->getProjectStatuses()
             ]
         ]);
     }

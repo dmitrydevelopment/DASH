@@ -649,7 +649,9 @@ class FinanceController
         $periodMonth = (int)date('m', strtotime($sendDate));
         $periodLabel = sprintf('%02d.%04d', $periodMonth, $periodYear);
 
-        $items = json_decode((string)($project['work_items_json'] ?? '[]'), true);
+        $items = isset($payload['items_snapshot']) && is_array($payload['items_snapshot'])
+            ? $payload['items_snapshot']
+            : json_decode((string)($project['work_items_json'] ?? '[]'), true);
         if (!is_array($items) || empty($items)) {
             $items = [[
                 'name' => (string)($project['name'] ?? 'Проектные работы'),
@@ -659,9 +661,9 @@ class FinanceController
         }
 
         $channelsJson = json_encode([
-            'email' => trim((string)($project['email'] ?? '')),
-            'send_telegram' => (int)($project['send_invoice_telegram'] ?? 0),
-            'send_diadoc' => (int)($project['send_invoice_diadoc'] ?? 0)
+            'email' => trim((string)($payload['email'] ?? ($project['email'] ?? ''))),
+            'send_telegram' => !empty($payload['send_telegram']) ? 1 : (int)($project['send_invoice_telegram'] ?? 0),
+            'send_diadoc' => !empty($payload['send_diadoc']) ? 1 : (int)($project['send_invoice_diadoc'] ?? 0)
         ], JSON_UNESCAPED_UNICODE);
 
         $planId = $this->plans->create(
@@ -683,9 +685,9 @@ class FinanceController
         }
         $result = $this->sendInvoicePlanInternal($plan, $planId, [
             'items_snapshot' => $items,
-            'email' => (string)($project['email'] ?? ''),
-            'send_telegram' => (int)($project['send_invoice_telegram'] ?? 0) === 1,
-            'send_diadoc' => (int)($project['send_invoice_diadoc'] ?? 0) === 1,
+            'email' => (string)($payload['email'] ?? ($project['email'] ?? '')),
+            'send_telegram' => !empty($payload['send_telegram']) || (int)($project['send_invoice_telegram'] ?? 0) === 1,
+            'send_diadoc' => !empty($payload['send_diadoc']) || (int)($project['send_invoice_diadoc'] ?? 0) === 1,
             'send_date' => $sendDate,
             'send_now' => true
         ]);

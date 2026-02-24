@@ -476,7 +476,7 @@ function createProjectCard(item) {
     <div class="amount">${formatCurrency(Number(item.amount || 0))}</div>
     <div class="status status--${canInvoice ? 'warning' : 'info'}">${escapeHtml(statusText)}</div>
     <div class="kanban-card-actions">
-      ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="invoiceProject(${projectId})">Выставить счет</button>` : ''}
+      ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="openProjectInvoiceModal(${projectId})">Выставить счет</button>` : ''}
       ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="openProjectEdit(${projectId})">Редактировать</button>` : ''}
       ${actionable ? `<button type="button" class="action-btn action-btn--delete" onclick="deleteProject(${projectId})">Удалить</button>` : ''}
     </div>
@@ -706,6 +706,24 @@ function bindInvoicePlanModalActions() {
         });
         if (!resp.ok) throw new Error('project update failed');
         showToast('Проект сохранен', 'success');
+      } else if (mode === 'project_invoice') {
+        if (!planId) return;
+        if (!Array.isArray(payload.items_snapshot) || payload.items_snapshot.length === 0) {
+          showToast('Добавьте минимум одну строку работ', 'error');
+          return;
+        }
+        const resp = await fetch(`/api.php/finance/projects/${planId}/invoice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload)
+        });
+        if (!resp.ok) {
+          const result = await resp.json().catch(() => null);
+          const msg = result?.error?.message || 'Не удалось выставить счет по проекту';
+          throw new Error(msg);
+        }
+        showToast('Счет по проекту выставлен', 'success');
       } else if (mode === 'create') {
         const clientId = Number(invoicePlanState.selectedClientId || 0);
         if (!clientId) {
@@ -887,6 +905,15 @@ function renderInvoicePlanModalMeta(mode, plan) {
     if (dateRow) dateRow.style.display = 'none';
     if (projectStatusWrap) projectStatusWrap.style.display = '';
     if (projectStatus) projectStatus.value = String(plan?.status || 'in_progress');
+  } else if (mode === 'project_invoice') {
+    if (title) title.textContent = 'Редактировать проект';
+    if (titleWrap) titleWrap.style.display = '';
+    if (searchWrap) searchWrap.style.display = 'none';
+    if (titleEl) titleEl.textContent = plan?.client_name || '—';
+    if (submitBtn) submitBtn.textContent = 'Выставить счет';
+    if (docsWrap) docsWrap.style.display = 'none';
+    if (dateRow) dateRow.style.display = '';
+    if (projectStatusWrap) projectStatusWrap.style.display = 'none';
   } else if (mode === 'create') {
     if (title) title.textContent = 'Добавить счет к выставлению';
     if (titleWrap) titleWrap.style.display = 'none';
@@ -1158,6 +1185,36 @@ async function openProjectEdit(projectId) {
   modal.classList.add('active');
 }
 
+async function openProjectInvoiceModal(projectId) {
+  const project = statusBoardState.projects.find((x) => Number(x.id) === Number(projectId));
+  if (!project) return;
+  const modal = document.getElementById('invoicePlanSendModal');
+  if (!modal) return;
+  await ensureInvoicePlanWorkCategories();
+
+  invoicePlanState.mode = 'project_invoice';
+  invoicePlanState.currentPlan = project;
+
+  const idInput = document.getElementById('invoicePlanSendPlanId');
+  const emailInput = document.getElementById('invoicePlanSendEmail');
+  const telegramInput = document.getElementById('invoicePlanSendTelegram');
+  const diadocInput = document.getElementById('invoicePlanSendDiadoc');
+  const sendNowInput = document.getElementById('invoicePlanSendNow');
+  const dateInput = document.getElementById('invoicePlanSendDate');
+
+  if (idInput) idInput.value = String(project.id || '');
+  if (emailInput) emailInput.value = project.email || '';
+  if (telegramInput) telegramInput.checked = Number(project.send_invoice_telegram || 0) === 1;
+  if (diadocInput) diadocInput.checked = Number(project.send_invoice_diadoc || 0) === 1;
+  if (sendNowInput) sendNowInput.checked = true;
+  if (dateInput) dateInput.value = formatDateForInput(new Date());
+
+  const lines = Array.isArray(project.work_items) ? project.work_items : [];
+  renderInvoicePlanLinesRows(lines.length ? lines : [{ name: project.name || '', amount: project.amount || 0, category: '' }]);
+  renderInvoicePlanModalMeta('project_invoice', project);
+  modal.classList.add('active');
+}
+
 async function deleteProject(projectId) {
   if (!confirm('Удалить проект?')) return;
   try {
@@ -1171,27 +1228,6 @@ async function deleteProject(projectId) {
   } catch (err) {
     console.error(err);
     showToast('Не удалось удалить проект', 'error');
-  }
-}
-
-async function invoiceProject(projectId) {
-  try {
-    const resp = await fetch(`/api.php/finance/projects/${projectId}/invoice`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify({ send_date: formatDateForInput(new Date()) })
-    });
-    if (!resp.ok) {
-      const result = await resp.json().catch(() => null);
-      const msg = result?.error?.message || 'Не удалось выставить счет по проекту';
-      throw new Error(msg);
-    }
-    showToast('Счет по проекту выставлен', 'success');
-    await loadStatusBoard();
-  } catch (err) {
-    console.error(err);
-    showToast(err?.message || 'Не удалось выставить счет по проекту', 'error');
   }
 }
 
@@ -3844,6 +3880,7 @@ function initSettingsTab() {
   switchSettingsSubcategory(currentSettingsSubcategory);
   initCrmRolesUIOnce();
   initWorkCategoriesUIOnce();
+  initProjectStatusesUIOnce();
 
   loadCrmSettings();
 }
@@ -3986,6 +4023,7 @@ function initCrmRolesUIOnce() {
 
 
 let crmWorkCategoriesInitialized = false;
+let crmProjectStatusesInitialized = false;
 
 function resetWorkCategoriesUI() {
   const list = document.getElementById('crmWorkCategoriesList');
@@ -4119,6 +4157,127 @@ function initWorkCategoriesUIOnce() {
   });
 }
 
+function resetProjectStatusesUI() {
+  const list = document.getElementById('crmProjectStatusesList');
+  if (!list) return;
+
+  list.innerHTML = `
+    <div class="form-row" data-project-status-row="1" data-fixed="1">
+      <div class="form-group">
+        <input type="text" class="crmProjectStatusName" placeholder="Название статуса" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <input type="text" class="crmProjectStatusCode" placeholder="Код статуса" style="width: 90%;" autocomplete="off">
+        <button class="action-btn action-btn--delete crmProjectStatusRemoveBtn" title="Удалить">🗑️</button>
+      </div>
+    </div>
+  `;
+}
+
+function addProjectStatusRow(name, code) {
+  const list = document.getElementById('crmProjectStatusesList');
+  if (!list) return;
+
+  const row = document.createElement('div');
+  row.className = 'form-row';
+  row.setAttribute('data-project-status-row', '1');
+  row.innerHTML = `
+    <div class="form-group">
+      <input type="text" class="crmProjectStatusName" placeholder="Название статуса" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <input type="text" class="crmProjectStatusCode" placeholder="Код статуса" style="width: 90%;" autocomplete="off">
+      <button class="action-btn action-btn--delete crmProjectStatusRemoveBtn" title="Удалить">🗑️</button>
+    </div>
+  `;
+
+  const n = row.querySelector('.crmProjectStatusName');
+  const c = row.querySelector('.crmProjectStatusCode');
+  if (n) n.value = name || '';
+  if (c) c.value = code || '';
+
+  list.appendChild(row);
+}
+
+function collectProjectStatuses() {
+  const list = document.getElementById('crmProjectStatusesList');
+  if (!list) return [];
+
+  const rows = Array.from(list.querySelectorAll('[data-project-status-row="1"]'));
+  const out = [];
+
+  rows.forEach((row, idx) => {
+    const n = row.querySelector('.crmProjectStatusName');
+    const c = row.querySelector('.crmProjectStatusCode');
+    const name = n ? String(n.value || '').trim() : '';
+    const code = c ? String(c.value || '').trim() : '';
+    if (name === '' && code === '') return;
+    out.push({
+      name,
+      code,
+      sort_order: idx,
+      is_active: 1
+    });
+  });
+
+  return out;
+}
+
+function fillProjectStatusesFromApi(items) {
+  resetProjectStatusesUI();
+
+  const list = document.getElementById('crmProjectStatusesList');
+  if (!list) return;
+
+  const fixedRow = list.querySelector('[data-fixed="1"]');
+  const fixedName = fixedRow ? fixedRow.querySelector('.crmProjectStatusName') : null;
+  const fixedCode = fixedRow ? fixedRow.querySelector('.crmProjectStatusCode') : null;
+  const arr = Array.isArray(items) ? items : [];
+
+  if (arr.length === 0) {
+    if (fixedName) fixedName.value = 'В работе';
+    if (fixedCode) fixedCode.value = 'in_progress';
+    addProjectStatusRow('Выставить счет', 'to_pay');
+    return;
+  }
+
+  if (fixedName) fixedName.value = arr[0].name || '';
+  if (fixedCode) fixedCode.value = arr[0].code || '';
+  for (let i = 1; i < arr.length; i++) {
+    addProjectStatusRow(arr[i].name || '', arr[i].code || '');
+  }
+}
+
+function initProjectStatusesUIOnce() {
+  const list = document.getElementById('crmProjectStatusesList');
+  const addBtn = document.getElementById('crmAddProjectStatusBtn');
+  if (!list || !addBtn) return;
+  if (crmProjectStatusesInitialized) return;
+  crmProjectStatusesInitialized = true;
+
+  addBtn.addEventListener('click', () => {
+    addProjectStatusRow('', '');
+  });
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest('.crmProjectStatusRemoveBtn') : null;
+    if (!btn) return;
+    const row = btn.closest('[data-project-status-row="1"]');
+    if (!row) return;
+
+    const rows = Array.from(list.querySelectorAll('[data-project-status-row="1"]'));
+    const isFixed = row.getAttribute('data-fixed') === '1';
+    if (isFixed && rows.length === 1) {
+      const n = row.querySelector('.crmProjectStatusName');
+      const c = row.querySelector('.crmProjectStatusCode');
+      if (n) n.value = '';
+      if (c) c.value = '';
+      return;
+    }
+    row.remove();
+  });
+}
+
 async function loadCrmSettings() {
   try {
     const resp = await fetch('/api.php/settings', {
@@ -4135,6 +4294,7 @@ async function loadCrmSettings() {
     window.crmSettings = s;
     const roles = result.data.roles || [];
     const workCategories = result.data.work_categories || [];
+    const projectStatuses = result.data.project_statuses || [];
     invoicePlanState.workCategories = Array.isArray(workCategories) ? workCategories : [];
 
     const tinkoffEl = document.getElementById('crmTinkoffBusinessToken');
@@ -4205,6 +4365,10 @@ async function loadCrmSettings() {
     if (typeof fillWorkCategoriesFromApi === 'function') {
       fillWorkCategoriesFromApi(workCategories);
     }
+    if (typeof fillProjectStatusesFromApi === 'function') {
+      fillProjectStatusesFromApi(projectStatuses);
+      projectStatusOptions = Array.isArray(projectStatuses) ? projectStatuses.map((s) => ({ code: s.code, name: s.name })) : [];
+    }
   } catch (e) {
     console.error('loadCrmSettings error', e);
   }
@@ -4232,6 +4396,7 @@ async function saveCrmSettings() {
 
   const roles = (typeof collectCrmRoles === 'function') ? collectCrmRoles() : [];
   const workCategories = (typeof collectWorkCategories === 'function') ? collectWorkCategories() : [];
+  const projectStatuses = (typeof collectProjectStatuses === 'function') ? collectProjectStatuses() : [];
 
   const getVal = (id) => {
     const el = document.getElementById(id);
@@ -4283,7 +4448,8 @@ async function saveCrmSettings() {
     finance_diadoc_from_box_id: getVal('financeDiadocFromBoxId'),
 
     roles: roles,
-    work_categories: workCategories
+    work_categories: workCategories,
+    project_statuses: projectStatuses
   };
 
   try {
@@ -4303,6 +4469,15 @@ async function saveCrmSettings() {
 
     if (result.data && typeof fillCrmRolesFromApi === 'function') {
       fillCrmRolesFromApi(result.data.roles || []);
+    }
+    if (result.data && typeof fillWorkCategoriesFromApi === 'function') {
+      fillWorkCategoriesFromApi(result.data.work_categories || []);
+    }
+    if (result.data && typeof fillProjectStatusesFromApi === 'function') {
+      fillProjectStatusesFromApi(result.data.project_statuses || []);
+      projectStatusOptions = Array.isArray(result.data.project_statuses)
+        ? result.data.project_statuses.map((s) => ({ code: s.code, name: s.name }))
+        : [];
     }
 
     if (typeof showToast === 'function') showToast('Настройки сохранены', 'success');
@@ -6662,7 +6837,7 @@ window.editClient = editClient;
 window.deleteClient = deleteClient;
 window.closeClientModal = closeClientModal;
 window.sendReminder = sendReminder;
-window.invoiceProject = invoiceProject;
+window.openProjectInvoiceModal = openProjectInvoiceModal;
 window.openProjectQuickCreate = openProjectQuickCreate;
 window.openProjectEdit = openProjectEdit;
 window.deleteProject = deleteProject;
