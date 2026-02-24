@@ -216,6 +216,13 @@
                                 <label for="invoicePlanSendEmail">Email клиента</label>
                                 <input type="email" id="invoicePlanSendEmail" placeholder="client@example.com" />
                             </div>
+                            <div class="form-group" id="projectStatusWrap" style="display:none;">
+                                <label for="projectStatus">Статус проекта</label>
+                                <select id="projectStatus">
+                                    <option value="in_progress">В работе</option>
+                                    <option value="to_pay">Выставить счет</option>
+                                </select>
+                            </div>
                             <div class="form-group">
                                 <label>Работы</label>
                                 <div id="invoicePlanLinesRows" class="invoice-plan-lines-rows"></div>

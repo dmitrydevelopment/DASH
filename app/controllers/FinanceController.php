@@ -216,6 +216,9 @@ class FinanceController
             if (!is_array($workItems)) {
                 $workItems = [];
             }
+            $statusCode = (string)($project['status'] ?? 'in_progress');
+            if ($statusCode === 'in_work') $statusCode = 'in_progress';
+            if ($statusCode === 'ready_to_invoice') $statusCode = 'to_pay';
             $projectsOut[] = [
                 'id' => (int)$project['id'],
                 'client_id' => (int)$project['client_id'],
@@ -224,7 +227,8 @@ class FinanceController
                 'amount' => (float)($project['amount'] ?? 0),
                 'work_items_json' => $project['work_items_json'] ?? '[]',
                 'work_items' => $workItems,
-                'status' => (string)($project['status'] ?? 'in_work'),
+                'status' => $statusCode,
+                'status_name' => (string)($project['status_name'] ?? $project['status'] ?? ''),
                 'created_at' => $project['created_at'] ?? null,
                 'updated_at' => $project['updated_at'] ?? null
             ];
@@ -538,6 +542,12 @@ class FinanceController
         sendJson(['data' => $this->projects->all()]);
     }
 
+    public function projectStatuses()
+    {
+        Auth::requireAuth();
+        sendJson(['data' => $this->projects->statuses()]);
+    }
+
     public function projectsCreate()
     {
         Auth::requireAuth();
@@ -579,6 +589,12 @@ class FinanceController
         $payload = getJsonPayload();
         $name = trim((string)($payload['name'] ?? $project['name']));
         $amount = (float)($payload['amount'] ?? $project['amount']);
+        $status = trim((string)($payload['status'] ?? $project['status']));
+        if ($status === 'in_work') $status = 'in_progress';
+        if ($status === 'ready_to_invoice') $status = 'to_pay';
+        if ($status !== 'in_progress' && $status !== 'to_pay') {
+            $status = 'in_progress';
+        }
         $items = isset($payload['work_items']) && is_array($payload['work_items'])
             ? $payload['work_items']
             : json_decode((string)($project['work_items_json'] ?? '[]'), true);
@@ -591,7 +607,7 @@ class FinanceController
             sendError('VALIDATION_ERROR', 'Название и сумма проекта обязательны', 422);
         }
 
-        $ok = $this->projects->updateEditable((int)$id, $name, $amount, $itemsJson);
+        $ok = $this->projects->updateEditable((int)$id, $name, $amount, $itemsJson, $status);
         if (!$ok) {
             sendError('UPDATE_FAILED', 'Не удалось обновить проект', 500);
         }
@@ -599,19 +615,13 @@ class FinanceController
         sendJson(['ok' => true]);
     }
 
-    public function projectsSetReady($id)
+    public function projectsDelete($id)
     {
         Auth::requireAuth();
-        $project = $this->projects->find((int)$id);
-        if (!$project) {
-            sendError('NOT_FOUND', 'Проект не найден', 404);
-        }
-
-        $ok = $this->projects->setStatus((int)$id, 'ready_to_invoice');
+        $ok = $this->projects->delete((int)$id);
         if (!$ok) {
-            sendError('UPDATE_FAILED', 'Не удалось изменить статус проекта', 500);
+            sendError('DELETE_FAILED', 'Не удалось удалить проект', 500);
         }
-
         sendJson(['ok' => true]);
     }
 
@@ -622,7 +632,10 @@ class FinanceController
         if (!$project) {
             sendError('NOT_FOUND', 'Проект не найден', 404);
         }
-        if (($project['status'] ?? '') !== 'ready_to_invoice') {
+        $statusCode = (string)($project['status'] ?? '');
+        if ($statusCode === 'in_work') $statusCode = 'in_progress';
+        if ($statusCode === 'ready_to_invoice') $statusCode = 'to_pay';
+        if ($statusCode !== 'to_pay') {
             sendError('INVALID_STATUS', 'Выставление счета доступно только для готовых проектов', 422);
         }
 

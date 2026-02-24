@@ -299,14 +299,23 @@ if ($resource === 'auth') {
         }
     }
 
+    // /api.php/finance/project-statuses
+    if ($param1 === 'project-statuses' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->projectStatuses();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
     // /api.php/finance/projects/{id}
     if ($param1 === 'projects' && $param2 !== null && ctype_digit($param2)) {
         $id = (int)$param2;
 
-        if ($method === 'PATCH' || $method === 'PUT') {
+        if ($method === 'DELETE') {
+            $controller->projectsDelete($id);
+        } elseif ($method === 'PATCH' || $method === 'PUT') {
             $controller->projectsUpdate($id);
-        } elseif ($method === 'POST' && isset($segments[3]) && $segments[3] === 'ready') {
-            $controller->projectsSetReady($id);
         } elseif ($method === 'POST' && isset($segments[3]) && $segments[3] === 'invoice') {
             $controller->projectsSendInvoice($id);
         } else {

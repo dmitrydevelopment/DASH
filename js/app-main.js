@@ -237,12 +237,52 @@ let statusBoardState = {
   meta: {}
 };
 let actsBootstrapLoading = false;
+let projectStatusOptions = [];
 
 async function initKanbanBoard() {
   await loadStatusBoard();
   bindInvoicePlanDnD();
   bindInvoicePlanModalActions();
   bindStatusActions();
+}
+
+async function ensureProjectStatuses() {
+  if (Array.isArray(projectStatusOptions) && projectStatusOptions.length > 0) return;
+  try {
+    const resp = await fetch('/api.php/finance/project-statuses', {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' }
+    });
+    const result = await resp.json().catch(() => null);
+    const rows = Array.isArray(result?.data) ? result.data : [];
+    if (resp.ok && rows.length > 0) {
+      projectStatusOptions = rows;
+    } else {
+      projectStatusOptions = [
+        { code: 'in_progress', name: 'В работе' },
+        { code: 'to_pay', name: 'Выставить счет' }
+      ];
+    }
+  } catch (e) {
+    projectStatusOptions = [
+      { code: 'in_progress', name: 'В работе' },
+      { code: 'to_pay', name: 'Выставить счет' }
+    ];
+  }
+}
+
+function populateProjectStatusOptions(selectedCode = 'in_progress') {
+  const select = document.getElementById('projectStatus');
+  if (!select) return;
+  const rows = Array.isArray(projectStatusOptions) && projectStatusOptions.length
+    ? projectStatusOptions
+    : [
+      { code: 'in_progress', name: 'В работе' },
+      { code: 'to_pay', name: 'Выставить счет' }
+    ];
+  select.innerHTML = rows.map((r) => `<option value="${escapeHtml(r.code || '')}">${escapeHtml(r.name || r.code || '')}</option>`).join('');
+  select.value = selectedCode;
 }
 
 
@@ -426,16 +466,19 @@ function createProjectCard(item) {
   card.className = 'kanban-card';
   const projectId = Number(item.id);
   const actionable = Number.isFinite(projectId) && projectId > 0;
-  const isReady = String(item.status || '') === 'ready_to_invoice';
+  const statusCode = String(item.status || 'in_progress');
+  const canInvoice = statusCode === 'to_pay';
+  const statusText = String(item.status_name || '').trim() || (statusCode === 'to_pay' ? 'Выставить счет' : 'В работе');
 
   card.innerHTML = `
     <h5>${escapeHtml(item.client_name || '—')}</h5>
     <div class="category">Проект: ${escapeHtml(item.name || '—')}</div>
     <div class="amount">${formatCurrency(Number(item.amount || 0))}</div>
-    <div class="status status--${isReady ? 'warning' : 'info'}">${isReady ? 'Можно выставлять счет' : 'В работе'}</div>
+    <div class="status status--${canInvoice ? 'warning' : 'info'}">${escapeHtml(statusText)}</div>
     <div class="kanban-card-actions">
-      ${actionable && !isReady ? `<button type="button" class="action-btn action-btn--edit" onclick="markProjectReady(${projectId})">Можно выставлять счет</button>` : ''}
-      ${actionable && isReady ? `<button type="button" class="action-btn action-btn--edit" onclick="invoiceProject(${projectId})">Выставить счет</button>` : ''}
+      ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="invoiceProject(${projectId})">Выставить счет</button>` : ''}
+      ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="openProjectEdit(${projectId})">Редактировать</button>` : ''}
+      ${actionable ? `<button type="button" class="action-btn action-btn--delete" onclick="deleteProject(${projectId})">Удалить</button>` : ''}
     </div>
   `;
 
@@ -596,6 +639,7 @@ function bindInvoicePlanModalActions() {
     e.preventDefault();
     const mode = document.getElementById('invoicePlanSendMode')?.value || 'send';
     const planId = Number(document.getElementById('invoicePlanSendPlanId')?.value || 0);
+    const projectStatus = document.getElementById('projectStatus')?.value || 'in_progress';
     const payload = {
       email: document.getElementById('invoicePlanSendEmail')?.value || '',
       items_snapshot: collectInvoicePlanLinesRows(),
@@ -637,6 +681,31 @@ function bindInvoicePlanModalActions() {
         });
         if (!resp.ok) throw new Error('create project failed');
         showToast('Проект добавлен', 'success');
+      } else if (mode === 'project_edit') {
+        if (!planId) return;
+        if (!Array.isArray(payload.items_snapshot) || payload.items_snapshot.length === 0) {
+          showToast('Добавьте минимум одну строку работ', 'error');
+          return;
+        }
+        const total = payload.items_snapshot.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+        if (!Number.isFinite(total) || total <= 0) {
+          showToast('Сумма проекта должна быть больше 0', 'error');
+          return;
+        }
+        const projectName = String(payload.items_snapshot[0]?.name || '').trim() || 'Проект';
+        const resp = await fetch(`/api.php/finance/projects/${planId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            name: projectName,
+            amount: total,
+            status: projectStatus,
+            work_items: payload.items_snapshot
+          })
+        });
+        if (!resp.ok) throw new Error('project update failed');
+        showToast('Проект сохранен', 'success');
       } else if (mode === 'create') {
         const clientId = Number(invoicePlanState.selectedClientId || 0);
         if (!clientId) {
@@ -792,16 +861,32 @@ function renderInvoicePlanModalMeta(mode, plan) {
   const docsWrap = document.getElementById('invoicePlanDocLinks');
   const docsBody = document.getElementById('invoicePlanDocLinksBody');
   const dateRow = document.getElementById('invoicePlanSendDate')?.closest('.form-row');
+  const projectStatusWrap = document.getElementById('projectStatusWrap');
+  const projectStatus = document.getElementById('projectStatus');
 
   if (modeInput) modeInput.value = mode;
   if (mode === 'project_create') {
+    populateProjectStatusOptions('in_progress');
     if (title) title.textContent = 'Добавить проект';
     if (titleWrap) titleWrap.style.display = 'none';
     if (searchWrap) searchWrap.style.display = '';
     if (submitBtn) submitBtn.textContent = 'Сохранить';
     if (docsWrap) docsWrap.style.display = 'none';
     if (dateRow) dateRow.style.display = 'none';
+    if (projectStatusWrap) projectStatusWrap.style.display = '';
+    if (projectStatus) projectStatus.value = 'in_progress';
     invoicePlanState.selectedClientId = null;
+  } else if (mode === 'project_edit') {
+    populateProjectStatusOptions(String(plan?.status || 'in_progress'));
+    if (title) title.textContent = 'Редактировать проект';
+    if (titleWrap) titleWrap.style.display = '';
+    if (searchWrap) searchWrap.style.display = 'none';
+    if (titleEl) titleEl.textContent = plan?.client_name || '—';
+    if (submitBtn) submitBtn.textContent = 'Сохранить';
+    if (docsWrap) docsWrap.style.display = 'none';
+    if (dateRow) dateRow.style.display = 'none';
+    if (projectStatusWrap) projectStatusWrap.style.display = '';
+    if (projectStatus) projectStatus.value = String(plan?.status || 'in_progress');
   } else if (mode === 'create') {
     if (title) title.textContent = 'Добавить счет к выставлению';
     if (titleWrap) titleWrap.style.display = 'none';
@@ -809,6 +894,7 @@ function renderInvoicePlanModalMeta(mode, plan) {
     if (submitBtn) submitBtn.textContent = 'Сохранить';
     if (docsWrap) docsWrap.style.display = 'none';
     if (dateRow) dateRow.style.display = '';
+    if (projectStatusWrap) projectStatusWrap.style.display = 'none';
     invoicePlanState.selectedClientId = null;
   } else if (mode === 'edit') {
     if (title) title.textContent = 'Редактировать счет';
@@ -817,6 +903,7 @@ function renderInvoicePlanModalMeta(mode, plan) {
     if (titleEl) titleEl.textContent = plan?.client_name || '—';
     if (submitBtn) submitBtn.textContent = 'Сохранить';
     if (dateRow) dateRow.style.display = '';
+    if (projectStatusWrap) projectStatusWrap.style.display = 'none';
   } else {
     if (title) title.textContent = 'Подтверждение выставления счета';
     if (titleWrap) titleWrap.style.display = '';
@@ -824,6 +911,7 @@ function renderInvoicePlanModalMeta(mode, plan) {
     if (titleEl) titleEl.textContent = plan?.client_name || '—';
     if (submitBtn) submitBtn.textContent = 'Выставить счет';
     if (dateRow) dateRow.style.display = '';
+    if (projectStatusWrap) projectStatusWrap.style.display = 'none';
   }
 
   if (docsWrap && docsBody) {
@@ -1001,6 +1089,7 @@ async function openProjectQuickCreate() {
 
   await ensureInvoicePlanWorkCategories();
   await ensureInvoicePlanClients(true);
+  await ensureProjectStatuses();
   const clients = getInvoicePlanClientsSource();
   if (!Array.isArray(clients) || clients.length === 0) {
     showToast('Сначала добавьте клиента', 'error');
@@ -1018,6 +1107,7 @@ async function openProjectQuickCreate() {
   const sendNowInput = document.getElementById('invoicePlanSendNow');
   const dateInput = document.getElementById('invoicePlanSendDate');
   const clientSearch = document.getElementById('invoicePlanClientSearch');
+  const projectStatus = document.getElementById('projectStatus');
 
   if (idInput) idInput.value = '';
   if (emailInput) emailInput.value = '';
@@ -1026,6 +1116,7 @@ async function openProjectQuickCreate() {
   if (sendNowInput) sendNowInput.checked = false;
   if (dateInput) dateInput.value = '';
   if (clientSearch) clientSearch.value = '';
+  if (projectStatus) projectStatus.value = 'in_progress';
 
   renderInvoicePlanModalMeta('project_create', null);
   renderInvoicePlanLinesRows([]);
@@ -1033,18 +1124,53 @@ async function openProjectQuickCreate() {
   modal.classList.add('active');
 }
 
-async function markProjectReady(projectId) {
+async function openProjectEdit(projectId) {
+  const project = statusBoardState.projects.find((x) => Number(x.id) === Number(projectId));
+  if (!project) return;
+  const modal = document.getElementById('invoicePlanSendModal');
+  if (!modal) return;
+  await ensureInvoicePlanWorkCategories();
+  await ensureProjectStatuses();
+
+  invoicePlanState.mode = 'project_edit';
+  invoicePlanState.currentPlan = project;
+  invoicePlanState.selectedClientId = Number(project.client_id || 0);
+
+  const idInput = document.getElementById('invoicePlanSendPlanId');
+  const emailInput = document.getElementById('invoicePlanSendEmail');
+  const telegramInput = document.getElementById('invoicePlanSendTelegram');
+  const diadocInput = document.getElementById('invoicePlanSendDiadoc');
+  const sendNowInput = document.getElementById('invoicePlanSendNow');
+  const dateInput = document.getElementById('invoicePlanSendDate');
+  const projectStatus = document.getElementById('projectStatus');
+
+  if (idInput) idInput.value = String(project.id || '');
+  if (emailInput) emailInput.value = project.email || '';
+  if (telegramInput) telegramInput.checked = Number(project.send_invoice_telegram || 0) === 1;
+  if (diadocInput) diadocInput.checked = Number(project.send_invoice_diadoc || 0) === 1;
+  if (sendNowInput) sendNowInput.checked = false;
+  if (dateInput) dateInput.value = '';
+  if (projectStatus) projectStatus.value = String(project.status || 'in_progress');
+
+  const lines = Array.isArray(project.work_items) ? project.work_items : [];
+  renderInvoicePlanLinesRows(lines.length ? lines : [{ name: project.name || '', amount: project.amount || 0, category: '' }]);
+  renderInvoicePlanModalMeta('project_edit', project);
+  modal.classList.add('active');
+}
+
+async function deleteProject(projectId) {
+  if (!confirm('Удалить проект?')) return;
   try {
-    const resp = await fetch(`/api.php/finance/projects/${projectId}/ready`, {
-      method: 'POST',
+    const resp = await fetch(`/api.php/finance/projects/${projectId}`, {
+      method: 'DELETE',
       credentials: 'same-origin'
     });
-    if (!resp.ok) throw new Error('set ready failed');
-    showToast('Проект переведен в "Можно выставлять счет"', 'success');
+    if (!resp.ok) throw new Error('project delete failed');
+    showToast('Проект удален', 'success');
     await loadStatusBoard();
   } catch (err) {
     console.error(err);
-    showToast('Не удалось сменить статус проекта', 'error');
+    showToast('Не удалось удалить проект', 'error');
   }
 }
 
@@ -1056,12 +1182,16 @@ async function invoiceProject(projectId) {
       credentials: 'same-origin',
       body: JSON.stringify({ send_date: formatDateForInput(new Date()) })
     });
-    if (!resp.ok) throw new Error('project invoice failed');
+    if (!resp.ok) {
+      const result = await resp.json().catch(() => null);
+      const msg = result?.error?.message || 'Не удалось выставить счет по проекту';
+      throw new Error(msg);
+    }
     showToast('Счет по проекту выставлен', 'success');
     await loadStatusBoard();
   } catch (err) {
     console.error(err);
-    showToast('Не удалось выставить счет по проекту', 'error');
+    showToast(err?.message || 'Не удалось выставить счет по проекту', 'error');
   }
 }
 
@@ -6532,9 +6662,10 @@ window.editClient = editClient;
 window.deleteClient = deleteClient;
 window.closeClientModal = closeClientModal;
 window.sendReminder = sendReminder;
-window.markProjectReady = markProjectReady;
 window.invoiceProject = invoiceProject;
 window.openProjectQuickCreate = openProjectQuickCreate;
+window.openProjectEdit = openProjectEdit;
+window.deleteProject = deleteProject;
 window.sendEndMonthNow = sendEndMonthNow;
 window.showToast = showToast;
 window.removeToast = removeToast;
