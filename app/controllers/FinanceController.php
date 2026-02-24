@@ -476,7 +476,13 @@ class FinanceController
             throw new RuntimeException('Не удалось создать счет');
         }
 
-        $this->plans->setSent($id, $documentId);
+        $sentOk = $this->plans->setSent($id, $documentId);
+        if (!$sentOk) {
+            if ($strict) {
+                sendError('PLAN_STATUS_UPDATE_FAILED', 'Не удалось перевести счет в статус ожидания оплаты', 500);
+            }
+            throw new RuntimeException('Не удалось перевести счет в статус ожидания оплаты');
+        }
 
         if ($email !== '') {
             $this->plans->insertSendEvent($documentId, 'email', $email, 'success', null);
