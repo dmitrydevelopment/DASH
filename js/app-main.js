@@ -784,7 +784,7 @@ function bindInvoicePlanModalActions() {
       }
     } catch (err) {
       console.error(err);
-      showToast('Не удалось сохранить карточку', 'error');
+      showToast(err?.message || 'Не удалось сохранить карточку', 'error');
     }
   });
 }

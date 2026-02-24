@@ -632,13 +632,6 @@ class FinanceController
         if (!$project) {
             sendError('NOT_FOUND', 'Проект не найден', 404);
         }
-        $statusCode = (string)($project['status'] ?? '');
-        if ($statusCode === 'in_work') $statusCode = 'in_progress';
-        if ($statusCode === 'ready_to_invoice') $statusCode = 'to_pay';
-        if ($statusCode !== 'to_pay') {
-            sendError('INVALID_STATUS', 'Выставление счета доступно только для готовых проектов', 422);
-        }
-
         $payload = getJsonPayload();
         $sendDate = trim((string)($payload['send_date'] ?? date('Y-m-d')));
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $sendDate)) {
