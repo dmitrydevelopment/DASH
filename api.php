@@ -306,6 +306,42 @@ if ($resource === 'auth') {
         }
     }
 
+    // /api.php/finance/payments-unknown
+    if ($param1 === 'payments-unknown' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->paymentsUnknown();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/finance/payments-candidates
+    if ($param1 === 'payments-candidates' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->paymentsCandidateInvoices();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/finance/payments-match
+    if ($param1 === 'payments-match' && $param2 === null) {
+        if ($method === 'POST') {
+            $controller->paymentsMatch();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/finance/tbank-webhook
+    if ($param1 === 'tbank-webhook' && $param2 === null) {
+        if ($method === 'POST') {
+            $controller->tbankWebhook();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
     // /api.php/finance/receivables
     if ($param1 === 'receivables' && $param2 === null) {
         if ($method === 'GET') {

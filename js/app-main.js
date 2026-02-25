@@ -6490,6 +6490,9 @@ const financeSprint2State = {
     revenue_yoy_percent: 0
   },
   payments: [],
+  unknownPayments: [],
+  paymentsTab: 'paid',
+  paymentMatchModalOperation: null,
   receivables: {
     top_debtors: [],
     invoice_timeline: []
@@ -6879,8 +6882,31 @@ function initPaymentsHistory() {
   bindFinanceClientAutocomplete('historyClientSearch', 'historyClientSuggestions');
   if (!financeSprint2State.historyBindDone) {
     financeSprint2State.historyBindDone = true;
-    document.getElementById('historyApplyBtn')?.addEventListener('click', () => {
+    const paidBtn = document.getElementById('paymentsTabPaidBtn');
+    const unknownBtn = document.getElementById('paymentsTabUnknownBtn');
+    const setTab = (tab) => {
+      financeSprint2State.paymentsTab = tab;
+      if (paidBtn) paidBtn.classList.toggle('active', tab === 'paid');
+      if (unknownBtn) unknownBtn.classList.toggle('active', tab === 'unknown');
+      const paidTable = document.getElementById('paymentsHistoryTable');
+      const unknownTable = document.getElementById('paymentsUnknownTable');
+      if (paidTable) paidTable.style.display = tab === 'paid' ? 'block' : 'none';
+      if (unknownTable) unknownTable.style.display = tab === 'unknown' ? 'block' : 'none';
+    };
+    paidBtn?.addEventListener('click', () => {
+      setTab('paid');
       loadPaymentsHistoryFromApi();
+    });
+    unknownBtn?.addEventListener('click', () => {
+      setTab('unknown');
+      loadUnknownPaymentsFromApi();
+    });
+    document.getElementById('historyApplyBtn')?.addEventListener('click', () => {
+      if (financeSprint2State.paymentsTab === 'unknown') {
+        loadUnknownPaymentsFromApi();
+      } else {
+        loadPaymentsHistoryFromApi();
+      }
     });
     document.getElementById('historyResetBtn')?.addEventListener('click', () => {
       const from = document.getElementById('historyDateFrom');
@@ -6891,10 +6917,22 @@ function initPaymentsHistory() {
       if (to) to.value = '';
       if (client) client.value = '';
       if (suggestions) suggestions.style.display = 'none';
-      loadPaymentsHistoryFromApi();
+      if (financeSprint2State.paymentsTab === 'unknown') {
+        loadUnknownPaymentsFromApi();
+      } else {
+        loadPaymentsHistoryFromApi();
+      }
     });
+    document.getElementById('paymentMatchSearchBtn')?.addEventListener('click', () => {
+      searchPaymentMatchCandidates();
+    });
+    setTab(financeSprint2State.paymentsTab || 'paid');
   }
-  loadPaymentsHistoryFromApi();
+  if (financeSprint2State.paymentsTab === 'unknown') {
+    loadUnknownPaymentsFromApi();
+  } else {
+    loadPaymentsHistoryFromApi();
+  }
 }
 
 async function loadPaymentsHistoryFromApi() {
@@ -6959,6 +6997,72 @@ function renderPaymentsHistoryTable(data) {
   `;
 }
 
+async function loadUnknownPaymentsFromApi() {
+  try {
+    showLoadingIndicator();
+    const params = new URLSearchParams();
+    const from = document.getElementById('historyDateFrom')?.value || '';
+    const to = document.getElementById('historyDateTo')?.value || '';
+    const q = document.getElementById('historyClientSearch')?.value?.trim() || '';
+    if (from) params.set('date_from', from);
+    if (to) params.set('date_to', to);
+    if (q) params.set('q', q);
+    params.set('_', String(Date.now()));
+    const result = await fetchFinanceJson(`/api.php/finance/payments-unknown?${params.toString()}`);
+    const rows = Array.isArray(result?.data?.items) ? result.data.items : [];
+    const summary = result?.data?.summary || {};
+    financeSprint2State.unknownPayments = rows;
+    const countElement = document.getElementById('paymentCount');
+    const totalElement = document.getElementById('paymentTotal');
+    const averageElement = document.getElementById('averagePayment');
+    if (countElement) countElement.textContent = String(Number(summary.count || rows.length));
+    if (totalElement) totalElement.textContent = formatCurrency(Number(summary.total || 0));
+    if (averageElement) averageElement.textContent = '—';
+    renderUnknownPaymentsTable(rows);
+  } catch (err) {
+    console.error('loadUnknownPaymentsFromApi failed', err);
+    showToast('Не удалось загрузить неизвестные поступления', 'error');
+    renderUnknownPaymentsTable([]);
+  } finally {
+    hideLoadingIndicator();
+  }
+}
+
+function renderUnknownPaymentsTable(data) {
+  const container = document.getElementById('paymentsUnknownTable');
+  if (!container) return;
+  if (!Array.isArray(data) || data.length === 0) {
+    container.innerHTML = '<div class="no-data">Нет неизвестных поступлений</div>';
+    return;
+  }
+  container.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Дата</th>
+          <th>Плательщик</th>
+          <th>ИНН</th>
+          <th>Назначение</th>
+          <th>Сумма</th>
+          <th>Действие</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${data.map((row) => `
+          <tr>
+            <td>${row.operation_time ? new Date(row.operation_time).toLocaleDateString('ru-RU') : '—'}</td>
+            <td>${escapeHtml(row.counterparty_name || '—')}</td>
+            <td>${escapeHtml(row.counterparty_inn || '—')}</td>
+            <td>${escapeHtml(row.description || '—')}</td>
+            <td style="text-align:right;">${formatCurrency(Number(row.amount || 0))}</td>
+            <td><button type="button" class="btn btn--primary" onclick="openPaymentMatchModal('${escapeHtml(String(row.operation_id || ''))}')">Найти счет</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
 function sortPaymentsTable(field) {
   const rows = [...financeSprint2State.payments];
   if (financeSprint2State.paymentsSortOrder.field === field) {
@@ -6986,7 +7090,132 @@ function sortPaymentsTable(field) {
 }
 
 function applyCustomDateRange() {
-  loadPaymentsHistoryFromApi();
+  if (financeSprint2State.paymentsTab === 'unknown') {
+    loadUnknownPaymentsFromApi();
+  } else {
+    loadPaymentsHistoryFromApi();
+  }
+}
+
+function openPaymentMatchModal(operationId) {
+  const op = (financeSprint2State.unknownPayments || []).find((x) => String(x.operation_id || '') === String(operationId || ''));
+  if (!op) {
+    showToast('Операция не найдена', 'error');
+    return;
+  }
+  financeSprint2State.paymentMatchModalOperation = op;
+  const modal = document.getElementById('paymentMatchModal');
+  if (!modal) return;
+  const info = document.getElementById('paymentMatchOperationInfo');
+  if (info) {
+    info.innerHTML = `
+      <div><strong>Операция:</strong> ${escapeHtml(op.operation_id || '—')}</div>
+      <div><strong>Дата:</strong> ${op.operation_time ? new Date(op.operation_time).toLocaleDateString('ru-RU') : '—'}</div>
+      <div><strong>Сумма:</strong> ${formatCurrency(Number(op.amount || 0))}</div>
+      <div><strong>Плательщик:</strong> ${escapeHtml(op.counterparty_name || '—')} (${escapeHtml(op.counterparty_inn || '—')})</div>
+    `;
+  }
+  const amountInput = document.getElementById('paymentMatchAmount');
+  if (amountInput) amountInput.value = Number(op.amount || 0).toFixed(2);
+  const candidates = document.getElementById('paymentMatchCandidatesTable');
+  if (candidates) candidates.innerHTML = '';
+  modal.classList.add('active');
+  searchPaymentMatchCandidates();
+}
+
+function closePaymentMatchModal() {
+  const modal = document.getElementById('paymentMatchModal');
+  if (modal) modal.classList.remove('active');
+}
+
+async function searchPaymentMatchCandidates() {
+  const op = financeSprint2State.paymentMatchModalOperation;
+  const container = document.getElementById('paymentMatchCandidatesTable');
+  if (!op || !container) return;
+  try {
+    const params = new URLSearchParams();
+    const client = document.getElementById('paymentMatchClient')?.value?.trim() || '';
+    const docNumber = document.getElementById('paymentMatchDocNumber')?.value?.trim() || '';
+    const dateFrom = document.getElementById('paymentMatchDateFrom')?.value || '';
+    const dateTo = document.getElementById('paymentMatchDateTo')?.value || '';
+    const amount = document.getElementById('paymentMatchAmount')?.value || '';
+    const type = document.getElementById('paymentMatchType')?.value || '';
+    if (client) params.set('client', client);
+    if (docNumber) params.set('doc_number', docNumber);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (amount) params.set('amount', amount);
+    if (type) params.set('invoice_type', type);
+    params.set('_', String(Date.now()));
+
+    const result = await fetchFinanceJson(`/api.php/finance/payments-candidates?${params.toString()}`);
+    const rows = Array.isArray(result?.data?.items) ? result.data.items : [];
+    if (!rows.length) {
+      container.innerHTML = '<div class="no-data">Счета не найдены</div>';
+      return;
+    }
+    container.innerHTML = `
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Клиент</th>
+            <th>Номер</th>
+            <th>Дата</th>
+            <th>Сумма</th>
+            <th>Тип</th>
+            <th>Действие</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((inv) => `
+            <tr>
+              <td>${escapeHtml(inv.client_name || '—')}</td>
+              <td>${escapeHtml(inv.doc_number || '—')}</td>
+              <td>${inv.doc_date ? new Date(inv.doc_date).toLocaleDateString('ru-RU') : '—'}</td>
+              <td style="text-align:right;">${formatCurrency(Number(inv.amount || 0))}</td>
+              <td>${inv.invoice_type === 'project' ? 'Проект' : 'Поддержка'}</td>
+              <td><button type="button" class="btn btn--primary" onclick="confirmPaymentMatch(${Number(inv.id || 0)})">Зачесть</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (err) {
+    console.error('searchPaymentMatchCandidates failed', err);
+    container.innerHTML = '<div class="no-data">Не удалось получить список счетов</div>';
+  }
+}
+
+async function confirmPaymentMatch(documentId) {
+  const op = financeSprint2State.paymentMatchModalOperation;
+  if (!op || !documentId) return;
+  showConfirmModal(
+    'Подтверждение зачета',
+    `Зачесть поступление ${formatCurrency(Number(op.amount || 0))} в счет #${documentId}?`,
+    async () => {
+      try {
+        const resp = await fetch('/api.php/finance/payments-match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ operation_id: op.operation_id, document_id: Number(documentId) })
+        });
+        const result = await resp.json().catch(() => null);
+        if (!resp.ok || !result || !result.ok) {
+          const msg = result?.error?.message || 'Не удалось зачесть оплату';
+          showToast(msg, 'error');
+          return;
+        }
+        closeConfirmModal();
+        closePaymentMatchModal();
+        showToast('Оплата успешно зачтена', 'success');
+        await loadUnknownPaymentsFromApi();
+      } catch (e) {
+        console.error('confirmPaymentMatch failed', e);
+        showToast('Не удалось зачесть оплату', 'error');
+      }
+    }
+  );
 }
 
 function initReceivablesSubcategory() {
@@ -7306,3 +7535,6 @@ window.applyCustomDateRange = applyCustomDateRange;
 window.initPaymentsHistory = initPaymentsHistory;
 window.initReceivablesSubcategory = initReceivablesSubcategory;
 window.initActsSubcategory = initActsSubcategory;
+window.openPaymentMatchModal = openPaymentMatchModal;
+window.closePaymentMatchModal = closePaymentMatchModal;
+window.confirmPaymentMatch = confirmPaymentMatch;

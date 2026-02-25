@@ -15,6 +15,7 @@ class FinanceController
     private $financeDocColumns = null;
     private $settingsColumns = null;
     private $invoicePlanColumns = null;
+    private $bankOperationColumns = null;
 
     public function __construct(mysqli $db)
     {
@@ -502,6 +503,287 @@ class FinanceController
                     'average' => $avg,
                 ],
             ],
+        ]);
+    }
+
+    public function paymentsUnknown()
+    {
+        Auth::requireAuth();
+
+        $dateFrom = isset($_GET['date_from']) ? trim((string)$_GET['date_from']) : '';
+        $dateTo = isset($_GET['date_to']) ? trim((string)$_GET['date_to']) : '';
+        $query = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+        if ($dateFrom !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) $dateFrom = '';
+        if ($dateTo !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) $dateTo = '';
+
+        $timeCol = $this->hasBankOperationColumn('operation_time') ? 'operation_time' : ($this->hasBankOperationColumn('occurred_at') ? 'occurred_at' : 'created_at');
+        $descCol = $this->hasBankOperationColumn('description') ? 'description' : ($this->hasBankOperationColumn('purpose') ? 'purpose' : "''");
+        $nameCol = $this->hasBankOperationColumn('counterparty_name') ? 'counterparty_name' : "''";
+        $innCol = $this->hasBankOperationColumn('counterparty_inn') ? 'counterparty_inn' : "''";
+
+        $where = ["(bo.matched_document_id IS NULL OR bo.matched_document_id = 0)"];
+        $types = '';
+        $params = [];
+        if ($dateFrom !== '') {
+            $where[] = "DATE(bo.$timeCol) >= ?";
+            $types .= 's';
+            $params[] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $where[] = "DATE(bo.$timeCol) <= ?";
+            $types .= 's';
+            $params[] = $dateTo;
+        }
+        if ($query !== '') {
+            $where[] = "(bo.$descCol LIKE ? OR bo.$nameCol LIKE ? OR bo.$innCol LIKE ? OR bo.operation_id LIKE ?)";
+            $types .= 'ssss';
+            $like = '%' . $query . '%';
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        $sql = "SELECT bo.id, bo.operation_id, bo.amount, bo.currency, bo.$timeCol AS operation_time,
+                       bo.$descCol AS description, bo.$nameCol AS counterparty_name, bo.$innCol AS counterparty_inn
+                FROM finance_bank_operations bo
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY bo.$timeCol DESC, bo.id DESC
+                LIMIT 1000";
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            sendError('DB_ERROR', 'Не удалось получить неизвестные поступления', 500);
+        }
+        $this->bindStmtParams($stmt, $types, $params);
+        $stmt->execute();
+        $res = $stmt->get_result();
+
+        $rows = [];
+        $total = 0.0;
+        while ($res && ($row = $res->fetch_assoc())) {
+            $amount = (float)($row['amount'] ?? 0);
+            $rows[] = [
+                'id' => (int)($row['id'] ?? 0),
+                'operation_id' => (string)($row['operation_id'] ?? ''),
+                'operation_time' => (string)($row['operation_time'] ?? ''),
+                'amount' => $amount,
+                'currency' => (string)($row['currency'] ?? 'RUB'),
+                'description' => (string)($row['description'] ?? ''),
+                'counterparty_name' => (string)($row['counterparty_name'] ?? ''),
+                'counterparty_inn' => (string)($row['counterparty_inn'] ?? ''),
+            ];
+            $total += $amount;
+        }
+        $stmt->close();
+
+        sendJson([
+            'data' => [
+                'items' => $rows,
+                'summary' => [
+                    'count' => count($rows),
+                    'total' => $total,
+                ],
+            ],
+        ]);
+    }
+
+    public function paymentsCandidateInvoices()
+    {
+        Auth::requireAuth();
+
+        $client = isset($_GET['client']) ? trim((string)$_GET['client']) : '';
+        $docNumber = isset($_GET['doc_number']) ? trim((string)$_GET['doc_number']) : '';
+        $dateFrom = isset($_GET['date_from']) ? trim((string)$_GET['date_from']) : '';
+        $dateTo = isset($_GET['date_to']) ? trim((string)$_GET['date_to']) : '';
+        $amountRaw = isset($_GET['amount']) ? trim((string)$_GET['amount']) : '';
+        $invoiceType = isset($_GET['invoice_type']) ? trim((string)$_GET['invoice_type']) : '';
+        if ($dateFrom !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) $dateFrom = '';
+        if ($dateTo !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) $dateTo = '';
+
+        $where = ["d.doc_type = 'invoice'"];
+        $where[] = $this->buildInvoiceUnpaidWhere('d');
+
+        $types = '';
+        $params = [];
+        if ($client !== '') {
+            $where[] = "c.name LIKE ?";
+            $types .= 's';
+            $params[] = '%' . $client . '%';
+        }
+        if ($docNumber !== '') {
+            $where[] = "d.doc_number LIKE ?";
+            $types .= 's';
+            $params[] = '%' . $docNumber . '%';
+        }
+        if ($dateFrom !== '') {
+            $where[] = "d.doc_date >= ?";
+            $types .= 's';
+            $params[] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $where[] = "d.doc_date <= ?";
+            $types .= 's';
+            $params[] = $dateTo;
+        }
+        if ($amountRaw !== '' && is_numeric(str_replace(',', '.', $amountRaw))) {
+            $where[] = "ABS(d.total_sum - ?) < 0.01";
+            $types .= 'd';
+            $params[] = (float)str_replace(',', '.', $amountRaw);
+        }
+        if ($invoiceType === 'support') {
+            $where[] = "d.doc_number NOT LIKE 'INV-PLAN-%'";
+        } elseif ($invoiceType === 'project') {
+            $where[] = "d.doc_number LIKE 'INV-PLAN-%'";
+        }
+
+        $sql = "SELECT d.id, d.client_id, c.name AS client_name, d.doc_number, d.doc_date, d.total_sum, d.download_token,
+                       CASE WHEN d.doc_number LIKE 'INV-PLAN-%' THEN 'project' ELSE 'support' END AS invoice_type
+                FROM finance_documents d
+                INNER JOIN clients c ON c.id = d.client_id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY d.doc_date DESC, d.id DESC
+                LIMIT 300";
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            sendError('DB_ERROR', 'Не удалось получить счета для сопоставления', 500);
+        }
+        $this->bindStmtParams($stmt, $types, $params);
+        $stmt->execute();
+        $res = $stmt->get_result();
+
+        $rows = [];
+        while ($res && ($row = $res->fetch_assoc())) {
+            $rows[] = [
+                'id' => (int)($row['id'] ?? 0),
+                'client_id' => (int)($row['client_id'] ?? 0),
+                'client_name' => (string)($row['client_name'] ?? ''),
+                'doc_number' => (string)($row['doc_number'] ?? ''),
+                'doc_date' => (string)($row['doc_date'] ?? ''),
+                'amount' => (float)($row['total_sum'] ?? 0),
+                'invoice_type' => (string)($row['invoice_type'] ?? 'support'),
+                'invoice_download_url' => !empty($row['download_token'])
+                    ? '/api.php/finance/download?token=' . rawurlencode((string)$row['download_token'])
+                    : null,
+            ];
+        }
+        $stmt->close();
+
+        sendJson(['data' => ['items' => $rows]]);
+    }
+
+    public function paymentsMatch()
+    {
+        Auth::requireAuth();
+        $payload = getJsonPayload();
+        $operationId = isset($payload['operation_id']) ? trim((string)$payload['operation_id']) : '';
+        $documentId = isset($payload['document_id']) ? (int)$payload['document_id'] : 0;
+        if ($operationId === '' || $documentId <= 0) {
+            sendError('VALIDATION_ERROR', 'operation_id и document_id обязательны', 422);
+        }
+
+        $timeCol = $this->hasBankOperationColumn('operation_time') ? 'operation_time' : ($this->hasBankOperationColumn('occurred_at') ? 'occurred_at' : 'created_at');
+
+        $stmt = $this->db->prepare("SELECT operation_id, amount, $timeCol AS op_time, matched_document_id FROM finance_bank_operations WHERE operation_id = ? LIMIT 1");
+        if (!$stmt) {
+            sendError('DB_ERROR', 'Не удалось получить операцию', 500);
+        }
+        $stmt->bind_param('s', $operationId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $op = $res ? $res->fetch_assoc() : null;
+        $stmt->close();
+        if (!$op) {
+            sendError('NOT_FOUND', 'Операция не найдена', 404);
+        }
+        if ((int)($op['matched_document_id'] ?? 0) > 0) {
+            sendError('ALREADY_MATCHED', 'Операция уже привязана', 409);
+        }
+
+        $stmt = $this->db->prepare("SELECT id, total_sum FROM finance_documents WHERE id = ? AND doc_type = 'invoice' LIMIT 1");
+        if (!$stmt) {
+            sendError('DB_ERROR', 'Не удалось получить счет', 500);
+        }
+        $stmt->bind_param('i', $documentId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $doc = $res ? $res->fetch_assoc() : null;
+        $stmt->close();
+        if (!$doc) {
+            sendError('NOT_FOUND', 'Счет не найден', 404);
+        }
+
+        $paidAt = !empty($op['op_time']) ? (string)$op['op_time'] : date('Y-m-d H:i:s');
+        $paidSum = (float)($op['amount'] ?? 0);
+
+        $this->db->begin_transaction();
+        try {
+            $updatePayload = ['is_paid' => 1, 'paid_at' => $paidAt, 'paid_sum' => $paidSum, 'paid_status' => 'paid'];
+            $this->docs->updateById((int)$documentId, $updatePayload);
+
+            if ($this->hasInvoicePlanColumn('document_id') && $this->hasInvoicePlanColumn('status')) {
+                $stmt = $this->db->prepare("UPDATE invoice_plans SET status = 'paid', updated_at = NOW() WHERE document_id = ?");
+                if ($stmt) {
+                    $stmt->bind_param('i', $documentId);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+            }
+
+            $matchMethod = 'manual';
+            $stmt = $this->db->prepare("UPDATE finance_bank_operations
+                                        SET matched_document_id = ?, match_method = ?, matched_at = NOW()
+                                        WHERE operation_id = ?");
+            if (!$stmt) {
+                throw new RuntimeException('Не удалось сохранить сопоставление');
+            }
+            $stmt->bind_param('iss', $documentId, $matchMethod, $operationId);
+            $stmt->execute();
+            $stmt->close();
+
+            $this->db->commit();
+        } catch (Throwable $e) {
+            $this->db->rollback();
+            sendError('MATCH_FAILED', 'Не удалось привязать оплату к счету', 500);
+        }
+
+        sendJson(['ok' => true, 'operation_id' => $operationId, 'document_id' => $documentId]);
+    }
+
+    public function tbankWebhook()
+    {
+        $raw = file_get_contents('php://input');
+        $payload = json_decode((string)$raw, true);
+        if (!is_array($payload)) {
+            sendError('BAD_PAYLOAD', 'Некорректный JSON webhook', 400);
+        }
+
+        $ops = [];
+        if (isset($payload['operations']) && is_array($payload['operations'])) {
+            $ops = $payload['operations'];
+        } elseif (isset($payload['data']['operations']) && is_array($payload['data']['operations'])) {
+            $ops = $payload['data']['operations'];
+        } elseif (isset($payload[0]) && is_array($payload[0])) {
+            $ops = $payload;
+        } else {
+            $ops = [$payload];
+        }
+
+        $saved = 0;
+        $matched = 0;
+        foreach ($ops as $op) {
+            if (!is_array($op)) continue;
+            $operationId = $this->upsertBankOperation($op);
+            if ($operationId === '') continue;
+            $saved++;
+            if ($this->autoMatchBankOperation($operationId)) {
+                $matched++;
+            }
+        }
+
+        sendJson([
+            'ok' => true,
+            'saved' => $saved,
+            'matched' => $matched,
         ]);
     }
 
@@ -1580,6 +1862,246 @@ endobj
             $this->plans->ensurePlanByDocument($row, $row);
         }
         $res->close();
+    }
+
+    private function buildInvoiceUnpaidWhere($alias = 'd')
+    {
+        $alias = preg_replace('/[^a-zA-Z0-9_]/', '', (string)$alias);
+        if ($alias === '') $alias = 'd';
+        $hasIsPaid = $this->hasFinanceDocColumn('is_paid');
+        $hasPaidStatus = $this->hasFinanceDocColumn('paid_status');
+        if ($hasIsPaid && $hasPaidStatus) {
+            return "(NOT (COALESCE({$alias}.is_paid, 0) = 1 OR {$alias}.paid_status = 'paid'))";
+        }
+        if ($hasIsPaid) {
+            return "(COALESCE({$alias}.is_paid, 0) = 0)";
+        }
+        if ($hasPaidStatus) {
+            return "({$alias}.paid_status IS NULL OR {$alias}.paid_status <> 'paid')";
+        }
+        return "1 = 1";
+    }
+
+    private function getBankOperationColumns()
+    {
+        if ($this->bankOperationColumns !== null) {
+            return $this->bankOperationColumns;
+        }
+        $cols = [];
+        $res = $this->db->query('SHOW COLUMNS FROM finance_bank_operations');
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $cols[(string)$row['Field']] = true;
+            }
+            $res->close();
+        }
+        $this->bankOperationColumns = $cols;
+        return $cols;
+    }
+
+    private function hasBankOperationColumn($name)
+    {
+        $name = (string)$name;
+        if ($name === '') return false;
+        $cols = $this->getBankOperationColumns();
+        return isset($cols[$name]);
+    }
+
+    private function upsertBankOperation(array $op)
+    {
+        $operationId = trim((string)($op['operationId'] ?? $op['operation_id'] ?? $op['id'] ?? ''));
+        if ($operationId === '') {
+            return '';
+        }
+
+        $type = strtolower(trim((string)($op['operationType'] ?? $op['direction'] ?? $op['type'] ?? '')));
+        $isIncome = true;
+        if ($type !== '') {
+            $isIncome = (strpos($type, 'credit') !== false || strpos($type, 'income') !== false || strpos($type, 'in') === 0 || strpos($type, 'приход') !== false);
+        }
+        if (!$isIncome) {
+            return '';
+        }
+
+        $amountRaw = $op['amount'] ?? null;
+        if (is_array($amountRaw)) {
+            $amountRaw = $amountRaw['value'] ?? $amountRaw['amount'] ?? null;
+        }
+        $amount = (float)$amountRaw;
+        if ($amount <= 0) {
+            return '';
+        }
+
+        $currency = strtoupper(trim((string)($op['currency'] ?? ($op['amount']['currency'] ?? 'RUB'))));
+        if ($currency === '') $currency = 'RUB';
+        $opTime = (string)($op['operationDate'] ?? $op['operationTime'] ?? $op['date'] ?? date('Y-m-d H:i:s'));
+        $accountNumber = trim((string)($op['accountNumber'] ?? ($op['account']['accountNumber'] ?? '')));
+        $description = trim((string)($op['paymentPurpose'] ?? $op['description'] ?? $op['purpose'] ?? ''));
+        $counterpartyName = trim((string)($op['counterpartyName'] ?? $op['payerName'] ?? ($op['counterparty']['name'] ?? '')));
+        $counterpartyInn = trim((string)($op['counterpartyInn'] ?? $op['payerInn'] ?? ($op['counterparty']['inn'] ?? '')));
+        $rawJson = json_encode($op, JSON_UNESCAPED_UNICODE);
+
+        $fields = ['operation_id'];
+        $values = [$operationId];
+        $types = 's';
+        $add = function ($field, $type, $value) use (&$fields, &$values, &$types) {
+            $fields[] = $field;
+            $values[] = $value;
+            $types .= $type;
+        };
+        if ($this->hasBankOperationColumn('operation_time')) $add('operation_time', 's', $opTime);
+        if ($this->hasBankOperationColumn('occurred_at')) $add('occurred_at', 's', $opTime);
+        if ($this->hasBankOperationColumn('amount')) $add('amount', 'd', $amount);
+        if ($this->hasBankOperationColumn('currency')) $add('currency', 's', $currency);
+        if ($this->hasBankOperationColumn('account_number')) $add('account_number', 's', $accountNumber);
+        if ($this->hasBankOperationColumn('description')) $add('description', 's', $description);
+        if ($this->hasBankOperationColumn('purpose')) $add('purpose', 's', $description);
+        if ($this->hasBankOperationColumn('counterparty_name')) $add('counterparty_name', 's', $counterpartyName);
+        if ($this->hasBankOperationColumn('counterparty_inn')) $add('counterparty_inn', 's', $counterpartyInn);
+        if ($this->hasBankOperationColumn('status')) $add('status', 's', (string)($op['status'] ?? ''));
+        if ($this->hasBankOperationColumn('raw_json')) $add('raw_json', 's', $rawJson);
+        if ($this->hasBankOperationColumn('created_at')) $add('created_at', 's', date('Y-m-d H:i:s'));
+
+        $update = [];
+        foreach ($fields as $f) {
+            if ($f === 'operation_id' || $f === 'created_at') continue;
+            $update[] = "$f = VALUES($f)";
+        }
+        $sql = "INSERT INTO finance_bank_operations (" . implode(',', $fields) . ")
+                VALUES (" . implode(',', array_fill(0, count($fields), '?')) . ")
+                ON DUPLICATE KEY UPDATE " . implode(', ', $update);
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            return '';
+        }
+        $refs = [];
+        $refs[] = &$types;
+        foreach ($values as $k => $v) {
+            $values[$k] = $v;
+            $refs[] = &$values[$k];
+        }
+        call_user_func_array([$stmt, 'bind_param'], $refs);
+        $stmt->execute();
+        $stmt->close();
+        return $operationId;
+    }
+
+    private function autoMatchBankOperation($operationId)
+    {
+        $timeCol = $this->hasBankOperationColumn('operation_time') ? 'operation_time' : ($this->hasBankOperationColumn('occurred_at') ? 'occurred_at' : 'created_at');
+        $descCol = $this->hasBankOperationColumn('description') ? 'description' : ($this->hasBankOperationColumn('purpose') ? 'purpose' : "''");
+        $innCol = $this->hasBankOperationColumn('counterparty_inn') ? 'counterparty_inn' : "''";
+        $stmt = $this->db->prepare("SELECT operation_id, amount, $timeCol AS operation_time, $descCol AS description, $innCol AS counterparty_inn, matched_document_id
+                                    FROM finance_bank_operations
+                                    WHERE operation_id = ?
+                                    LIMIT 1");
+        if (!$stmt) return false;
+        $stmt->bind_param('s', $operationId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $op = $res ? $res->fetch_assoc() : null;
+        $stmt->close();
+        if (!$op) return false;
+        if ((int)($op['matched_document_id'] ?? 0) > 0) return true;
+
+        $purpose = (string)($op['description'] ?? '');
+        $amount = (float)($op['amount'] ?? 0);
+        $inn = trim((string)($op['counterparty_inn'] ?? ''));
+        $paidAt = !empty($op['operation_time']) ? (string)$op['operation_time'] : date('Y-m-d H:i:s');
+
+        // 1) Try match by invoice number in purpose.
+        if ($purpose !== '') {
+            $whereUnpaid = $this->buildInvoiceUnpaidWhere('d');
+            $sql = "SELECT d.id
+                    FROM finance_documents d
+                    WHERE d.doc_type = 'invoice'
+                      AND $whereUnpaid
+                      AND ? LIKE CONCAT('%', d.doc_number, '%')
+                    ORDER BY d.id DESC
+                    LIMIT 2";
+            $stmt = $this->db->prepare($sql);
+            if ($stmt) {
+                $stmt->bind_param('s', $purpose);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $ids = [];
+                while ($res && ($r = $res->fetch_assoc())) $ids[] = (int)$r['id'];
+                $stmt->close();
+                if (count($ids) === 1) {
+                    return $this->applyOperationToDocument($operationId, $ids[0], $amount, $paidAt, 'doc_number');
+                }
+            }
+        }
+
+        // 2) Try strict INN + exact amount unique match.
+        if ($inn !== '' && $amount > 0) {
+            $whereUnpaid = $this->buildInvoiceUnpaidWhere('d');
+            $sql = "SELECT d.id
+                    FROM finance_documents d
+                    INNER JOIN clients c ON c.id = d.client_id
+                    WHERE d.doc_type = 'invoice'
+                      AND $whereUnpaid
+                      AND c.inn = ?
+                      AND ABS(d.total_sum - ?) < 0.01
+                    ORDER BY d.id DESC
+                    LIMIT 2";
+            $stmt = $this->db->prepare($sql);
+            if ($stmt) {
+                $stmt->bind_param('sd', $inn, $amount);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $ids = [];
+                while ($res && ($r = $res->fetch_assoc())) $ids[] = (int)$r['id'];
+                $stmt->close();
+                if (count($ids) === 1) {
+                    return $this->applyOperationToDocument($operationId, $ids[0], $amount, $paidAt, 'inn_amount');
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function applyOperationToDocument($operationId, $documentId, $amount, $paidAt, $method)
+    {
+        $documentId = (int)$documentId;
+        if ($documentId <= 0) return false;
+
+        $this->db->begin_transaction();
+        try {
+            $this->docs->updateById($documentId, [
+                'is_paid' => 1,
+                'paid_status' => 'paid',
+                'paid_sum' => (float)$amount,
+                'paid_at' => (string)$paidAt
+            ]);
+
+            if ($this->hasInvoicePlanColumn('document_id') && $this->hasInvoicePlanColumn('status')) {
+                $stmt = $this->db->prepare("UPDATE invoice_plans SET status = 'paid', updated_at = NOW() WHERE document_id = ?");
+                if ($stmt) {
+                    $stmt->bind_param('i', $documentId);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+            }
+
+            $stmt = $this->db->prepare("UPDATE finance_bank_operations
+                                        SET matched_document_id = ?, match_method = ?, matched_at = NOW()
+                                        WHERE operation_id = ?");
+            if (!$stmt) {
+                throw new RuntimeException('operation update failed');
+            }
+            $method = (string)$method;
+            $stmt->bind_param('iss', $documentId, $method, $operationId);
+            $stmt->execute();
+            $stmt->close();
+
+            $this->db->commit();
+            return true;
+        } catch (Throwable $e) {
+            $this->db->rollback();
+            return false;
+        }
     }
 
     private function bindStmtParams(mysqli_stmt $stmt, $types, array $params)
