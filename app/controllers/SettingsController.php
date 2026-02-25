@@ -196,6 +196,8 @@ class SettingsController
             'scheduler_start_hour' => $hour,
 
             'crm_public_url' => (string) ($payload['crm_public_url'] ?? ''),
+            'admin_email' => (string) ($payload['admin_email'] ?? ''),
+            'admin_telegram_id' => (string) ($payload['admin_telegram_id'] ?? ''),
 
             'finance_tbank_account_number' => (string) ($payload['finance_tbank_account_number'] ?? ''),
             'finance_tbank_invoice_due_days' => isset($payload['finance_tbank_invoice_due_days']) ? (int) $payload['finance_tbank_invoice_due_days'] : 3,
