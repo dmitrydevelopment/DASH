@@ -3429,27 +3429,19 @@ function resetNotificationTriggersUI() {
     <div class="crm-notification-trigger-item" data-notification-trigger-row="1" data-fixed="1">
       <div class="form-row">
         <div class="form-group">
-          <input type="text" class="crmNotificationTriggerName" placeholder="Название триггера" autocomplete="off">
+          <input type="text" class="crmNotificationTriggerName" placeholder="Описание триггера" autocomplete="off">
         </div>
         <div class="form-group">
           <input type="text" class="crmNotificationTriggerEvent" placeholder="Код события (пример: finance.unknown_payment.created)" autocomplete="off">
         </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <select class="crmNotificationTriggerChannel">
-            <option value="telegram">telegram</option>
-            <option value="email">email</option>
-            <option value="webhook">webhook</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <input type="text" class="crmNotificationTriggerRecipient" placeholder="Получатель (email/chat id/url)">
-        </div>
         <div class="form-group form-group--inline-checkboxes">
           <label class="inline-checkbox">
-            <input type="checkbox" class="crmNotificationTriggerActive" checked>
-            <span>Активен</span>
+            <input type="checkbox" class="crmNotificationTriggerTelegram" checked>
+            <span>Телеграм</span>
+          </label>
+          <label class="inline-checkbox">
+            <input type="checkbox" class="crmNotificationTriggerEmail">
+            <span>Email</span>
           </label>
           <button class="action-btn action-btn--delete crmNotificationTriggerRemoveBtn" title="Удалить">🗑️</button>
         </div>
@@ -3458,7 +3450,7 @@ function resetNotificationTriggersUI() {
   `;
 }
 
-function addNotificationTriggerRow(name, eventCode, channel, recipient, isActive) {
+function addNotificationTriggerRow(name, eventCode, sendTelegram, sendEmail) {
   const list = document.getElementById('crmNotificationTriggersList');
   if (!list) return;
 
@@ -3468,27 +3460,19 @@ function addNotificationTriggerRow(name, eventCode, channel, recipient, isActive
   item.innerHTML = `
     <div class="form-row">
       <div class="form-group">
-        <input type="text" class="crmNotificationTriggerName" placeholder="Название триггера" autocomplete="off">
+        <input type="text" class="crmNotificationTriggerName" placeholder="Описание триггера" autocomplete="off">
       </div>
       <div class="form-group">
         <input type="text" class="crmNotificationTriggerEvent" placeholder="Код события (пример: finance.unknown_payment.created)" autocomplete="off">
       </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <select class="crmNotificationTriggerChannel">
-          <option value="telegram">telegram</option>
-          <option value="email">email</option>
-          <option value="webhook">webhook</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <input type="text" class="crmNotificationTriggerRecipient" placeholder="Получатель (email/chat id/url)">
-      </div>
       <div class="form-group form-group--inline-checkboxes">
         <label class="inline-checkbox">
-          <input type="checkbox" class="crmNotificationTriggerActive" checked>
-          <span>Активен</span>
+          <input type="checkbox" class="crmNotificationTriggerTelegram" checked>
+          <span>Телеграм</span>
+        </label>
+        <label class="inline-checkbox">
+          <input type="checkbox" class="crmNotificationTriggerEmail">
+          <span>Email</span>
         </label>
         <button class="action-btn action-btn--delete crmNotificationTriggerRemoveBtn" title="Удалить">🗑️</button>
       </div>
@@ -3497,14 +3481,12 @@ function addNotificationTriggerRow(name, eventCode, channel, recipient, isActive
 
   const nameEl = item.querySelector('.crmNotificationTriggerName');
   const eventEl = item.querySelector('.crmNotificationTriggerEvent');
-  const channelEl = item.querySelector('.crmNotificationTriggerChannel');
-  const recipientEl = item.querySelector('.crmNotificationTriggerRecipient');
-  const activeEl = item.querySelector('.crmNotificationTriggerActive');
+  const tgEl = item.querySelector('.crmNotificationTriggerTelegram');
+  const emailEl = item.querySelector('.crmNotificationTriggerEmail');
   if (nameEl) nameEl.value = name || '';
   if (eventEl) eventEl.value = eventCode || '';
-  if (channelEl) channelEl.value = channel || 'telegram';
-  if (recipientEl) recipientEl.value = recipient || '';
-  if (activeEl) activeEl.checked = (isActive === 1 || isActive === true);
+  if (tgEl) tgEl.checked = !!sendTelegram;
+  if (emailEl) emailEl.checked = !!sendEmail;
 
   list.appendChild(item);
 }
@@ -3518,26 +3500,36 @@ function collectNotificationTriggers() {
   rows.forEach((row, idx) => {
     const nameEl = row.querySelector('.crmNotificationTriggerName');
     const eventEl = row.querySelector('.crmNotificationTriggerEvent');
-    const channelEl = row.querySelector('.crmNotificationTriggerChannel');
-    const recipientEl = row.querySelector('.crmNotificationTriggerRecipient');
-    const activeEl = row.querySelector('.crmNotificationTriggerActive');
+    const tgEl = row.querySelector('.crmNotificationTriggerTelegram');
+    const emailEl = row.querySelector('.crmNotificationTriggerEmail');
 
     const triggerName = nameEl ? String(nameEl.value || '').trim() : '';
     const eventCode = eventEl ? String(eventEl.value || '').trim() : '';
-    const channel = channelEl ? String(channelEl.value || '').trim() : 'telegram';
-    const recipient = recipientEl ? String(recipientEl.value || '').trim() : '';
-    const isActive = activeEl && activeEl.checked ? 1 : 0;
+    const sendTelegram = !!(tgEl && tgEl.checked);
+    const sendEmail = !!(emailEl && emailEl.checked);
 
-    if (triggerName === '' && eventCode === '' && recipient === '') return;
+    if (triggerName === '' && eventCode === '') return;
 
-    out.push({
-      trigger_name: triggerName,
-      event_code: eventCode,
-      channel,
-      recipient,
-      is_active: isActive,
-      sort_order: idx
-    });
+    if (sendTelegram) {
+      out.push({
+        trigger_name: triggerName,
+        event_code: eventCode,
+        channel: 'telegram',
+        recipient: '',
+        is_active: 1,
+        sort_order: idx * 2
+      });
+    }
+    if (sendEmail) {
+      out.push({
+        trigger_name: triggerName,
+        event_code: eventCode,
+        channel: 'email',
+        recipient: '',
+        is_active: 1,
+        sort_order: idx * 2 + 1
+      });
+    }
   });
   return out;
 }
@@ -3553,40 +3545,60 @@ function fillNotificationTriggersFromApi(items) {
     if (!fixed) return;
     const nameEl = fixed.querySelector('.crmNotificationTriggerName');
     const eventEl = fixed.querySelector('.crmNotificationTriggerEvent');
-    const channelEl = fixed.querySelector('.crmNotificationTriggerChannel');
-    const recipientEl = fixed.querySelector('.crmNotificationTriggerRecipient');
-    const activeEl = fixed.querySelector('.crmNotificationTriggerActive');
+    const tgEl = fixed.querySelector('.crmNotificationTriggerTelegram');
+    const emailEl = fixed.querySelector('.crmNotificationTriggerEmail');
     if (nameEl) nameEl.value = 'Появление новой неопознанной оплаты';
     if (eventEl) eventEl.value = 'finance.unknown_payment.created';
-    if (channelEl) channelEl.value = 'telegram';
-    if (recipientEl) recipientEl.value = '';
-    if (activeEl) activeEl.checked = true;
+    if (tgEl) tgEl.checked = true;
+    if (emailEl) emailEl.checked = false;
     return;
   }
 
-  const first = arr[0] || {};
-  const fixed = list.querySelector('[data-fixed="1"]');
-  if (fixed) {
-    const nameEl = fixed.querySelector('.crmNotificationTriggerName');
-    const eventEl = fixed.querySelector('.crmNotificationTriggerEvent');
-    const channelEl = fixed.querySelector('.crmNotificationTriggerChannel');
-    const recipientEl = fixed.querySelector('.crmNotificationTriggerRecipient');
-    const activeEl = fixed.querySelector('.crmNotificationTriggerActive');
-    if (nameEl) nameEl.value = first.trigger_name || '';
-    if (eventEl) eventEl.value = first.event_code || '';
-    if (channelEl) channelEl.value = first.channel || 'telegram';
-    if (recipientEl) recipientEl.value = first.recipient || '';
-    if (activeEl) activeEl.checked = (first.is_active === 1 || first.is_active === true);
+  const groupedMap = new Map();
+  arr.forEach((row) => {
+    if (!row) return;
+    const triggerName = String(row.trigger_name || '').trim();
+    const eventCode = String(row.event_code || '').trim();
+    if (triggerName === '' && eventCode === '') return;
+    const key = `${triggerName}__${eventCode}`;
+    if (!groupedMap.has(key)) {
+      groupedMap.set(key, {
+        trigger_name: triggerName,
+        event_code: eventCode,
+        send_telegram: false,
+        send_email: false
+      });
+    }
+    const item = groupedMap.get(key);
+    const channel = String(row.channel || '').toLowerCase();
+    const active = row.is_active === 1 || row.is_active === true;
+    if (channel === 'telegram' && active) item.send_telegram = true;
+    if (channel === 'email' && active) item.send_email = true;
+  });
+
+  const grouped = Array.from(groupedMap.values());
+  const first = grouped[0] || null;
+  if (first) {
+    const fixed = list.querySelector('[data-fixed="1"]');
+    if (fixed) {
+      const nameEl = fixed.querySelector('.crmNotificationTriggerName');
+      const eventEl = fixed.querySelector('.crmNotificationTriggerEvent');
+      const tgEl = fixed.querySelector('.crmNotificationTriggerTelegram');
+      const emailEl = fixed.querySelector('.crmNotificationTriggerEmail');
+      if (nameEl) nameEl.value = first.trigger_name || '';
+      if (eventEl) eventEl.value = first.event_code || '';
+      if (tgEl) tgEl.checked = !!first.send_telegram;
+      if (emailEl) emailEl.checked = !!first.send_email;
+    }
   }
 
-  for (let i = 1; i < arr.length; i++) {
-    const row = arr[i] || {};
+  for (let i = 1; i < grouped.length; i++) {
+    const row = grouped[i];
     addNotificationTriggerRow(
       row.trigger_name || '',
       row.event_code || '',
-      row.channel || 'telegram',
-      row.recipient || '',
-      row.is_active
+      !!row.send_telegram,
+      !!row.send_email
     );
   }
 }
@@ -3599,7 +3611,7 @@ function initNotificationTriggersUIOnce() {
   crmNotificationTriggersInitialized = true;
 
   addBtn.addEventListener('click', () => {
-    addNotificationTriggerRow('', '', 'telegram', '', 1);
+    addNotificationTriggerRow('', '', true, false);
   });
 
   list.addEventListener('click', (e) => {
@@ -3613,14 +3625,12 @@ function initNotificationTriggersUIOnce() {
     if (isFixed && rows.length === 1) {
       const nameEl = row.querySelector('.crmNotificationTriggerName');
       const eventEl = row.querySelector('.crmNotificationTriggerEvent');
-      const channelEl = row.querySelector('.crmNotificationTriggerChannel');
-      const recipientEl = row.querySelector('.crmNotificationTriggerRecipient');
-      const activeEl = row.querySelector('.crmNotificationTriggerActive');
+      const tgEl = row.querySelector('.crmNotificationTriggerTelegram');
+      const emailEl = row.querySelector('.crmNotificationTriggerEmail');
       if (nameEl) nameEl.value = '';
       if (eventEl) eventEl.value = '';
-      if (channelEl) channelEl.value = 'telegram';
-      if (recipientEl) recipientEl.value = '';
-      if (activeEl) activeEl.checked = true;
+      if (tgEl) tgEl.checked = true;
+      if (emailEl) emailEl.checked = false;
       return;
     }
     row.remove();

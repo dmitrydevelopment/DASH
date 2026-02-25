@@ -1299,27 +1299,19 @@
     <div class="crm-notification-trigger-item" data-notification-trigger-row="1" data-fixed="1">
         <div class="form-row">
             <div class="form-group">
-                <input type="text" class="crmNotificationTriggerName" placeholder="Название триггера" autocomplete="off">
+                <input type="text" class="crmNotificationTriggerName" placeholder="Описание триггера" autocomplete="off">
             </div>
             <div class="form-group">
                 <input type="text" class="crmNotificationTriggerEvent" placeholder="Код события (пример: finance.unknown_payment.created)" autocomplete="off">
             </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <select class="crmNotificationTriggerChannel">
-                    <option value="telegram">telegram</option>
-                    <option value="email">email</option>
-                    <option value="webhook">webhook</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <input type="text" class="crmNotificationTriggerRecipient" placeholder="Получатель (email/chat id/url)">
-            </div>
             <div class="form-group form-group--inline-checkboxes">
                 <label class="inline-checkbox">
-                    <input type="checkbox" class="crmNotificationTriggerActive" checked>
-                    <span>Активен</span>
+                    <input type="checkbox" class="crmNotificationTriggerTelegram" checked>
+                    <span>Телеграм</span>
+                </label>
+                <label class="inline-checkbox">
+                    <input type="checkbox" class="crmNotificationTriggerEmail">
+                    <span>Email</span>
                 </label>
                 <button class="action-btn action-btn--delete crmNotificationTriggerRemoveBtn" title="Удалить">🗑️</button>
             </div>
