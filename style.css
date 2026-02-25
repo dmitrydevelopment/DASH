@@ -4574,10 +4574,6 @@ body {
   align-items: end;
 }
 
-.crm-notification-trigger-row > .form-group:first-child {
-  margin-right: var(--space-8);
-}
-
 .crm-notification-trigger-row .form-group--inline-checkboxes {
   margin-top: 0;
   white-space: nowrap;
@@ -4605,6 +4601,7 @@ body {
 .crm-notification-trigger-row .crm-notification-trigger-trash {
   display: flex;
   justify-content: center;
+  max-width: 120px;
 }
 
 .inline-checkbox {
