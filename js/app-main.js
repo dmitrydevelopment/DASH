@@ -1299,6 +1299,11 @@ function switchFinanceSubcategory(subcategory) {
     activeContent.style.display = 'block';
   }
 
+  const revenueTrendsSection = document.querySelector('#finance .revenue-trends-section');
+  if (revenueTrendsSection) {
+    revenueTrendsSection.style.display = subcategory === 'overview' ? 'block' : 'none';
+  }
+
   currentFinanceSubcategory = subcategory;
 
   // Initialize subcategory-specific content
@@ -8013,7 +8018,6 @@ async function loadFinanceOverviewFromApi() {
     initIncomeExpenseChart();
     initRevenueTable();
     initRevenueTrendsChart();
-    renderRevenueTrendMetrics();
   } catch (err) {
     console.error('loadFinanceOverviewFromApi failed', err);
     showToast('Не удалось загрузить обзор финансов', 'error');
@@ -8022,7 +8026,6 @@ async function loadFinanceOverviewFromApi() {
     initIncomeExpenseChart();
     initRevenueTable();
     initRevenueTrendsChart();
-    renderRevenueTrendMetrics();
   }
 }
 
@@ -8033,23 +8036,6 @@ function getFinanceRevenueTrends(period = '12_months') {
   if (period === '3_months') return rows.slice(-3);
   if (period === '6_months') return rows.slice(-6);
   return rows;
-}
-
-function renderRevenueTrendMetrics() {
-  const momEl = document.getElementById('revenueMoMValue');
-  const yoyEl = document.getElementById('revenueYoYValue');
-  const mom = Number(financeSprint2State.overview?.revenue_mom_percent || 0);
-  const yoy = Number(financeSprint2State.overview?.revenue_yoy_percent || 0);
-  if (momEl) {
-    momEl.textContent = `${mom >= 0 ? '+' : ''}${mom.toFixed(1)}%`;
-    momEl.classList.toggle('positive', mom >= 0);
-    momEl.classList.toggle('negative', mom < 0);
-  }
-  if (yoyEl) {
-    yoyEl.textContent = `${yoy >= 0 ? '+' : ''}${yoy.toFixed(1)}%`;
-    yoyEl.classList.toggle('positive', yoy >= 0);
-    yoyEl.classList.toggle('negative', yoy < 0);
-  }
 }
 
 function ensureFinanceClientAutocompleteBinding() {
@@ -8276,52 +8262,17 @@ function initRevenueTrendsChart() {
       labels: data.map((d) => d.month_name || ''),
       datasets: [
         {
-          label: 'Фактическая выручка',
+          label: 'Выручка',
           data: data.map((d) => Number(d.revenue || 0)),
           borderColor: '#1FB8CD',
           backgroundColor: 'rgba(31, 184, 205, 0.1)',
           borderWidth: 3,
-          fill: false,
+          fill: true,
           tension: 0.4,
           pointBackgroundColor: '#1FB8CD',
           pointBorderColor: '#ffffff',
           pointBorderWidth: 2,
           pointRadius: 6
-        },
-        {
-          label: 'Подтвержденная выручка',
-          data: data.map((d) => Number(d.confirmed || 0)),
-          borderColor: '#FFC185',
-          backgroundColor: 'rgba(255, 193, 133, 0.1)',
-          borderWidth: 2,
-          fill: false,
-          tension: 0.4,
-          pointBackgroundColor: '#FFC185',
-          pointRadius: 4
-        },
-        {
-          label: 'Прогнозная выручка',
-          data: data.map((d) => Number(d.projected || 0)),
-          borderColor: '#B4413C',
-          backgroundColor: 'rgba(180, 65, 60, 0.1)',
-          borderWidth: 2,
-          fill: false,
-          tension: 0.4,
-          borderDash: [5, 5],
-          pointBackgroundColor: '#B4413C',
-          pointRadius: 4
-        },
-        {
-          label: 'Прошлый год',
-          data: data.map((d) => Number(d.previous_year || 0)),
-          borderColor: '#5D878F',
-          backgroundColor: 'rgba(93, 135, 143, 0.1)',
-          borderWidth: 1,
-          fill: false,
-          tension: 0.4,
-          borderDash: [10, 5],
-          pointBackgroundColor: '#5D878F',
-          pointRadius: 3
         }
       ]
     },
@@ -8334,12 +8285,7 @@ function initRevenueTrendsChart() {
       },
       plugins: {
         legend: {
-          position: 'bottom',
-          labels: {
-            color: 'rgba(255, 255, 255, 0.8)',
-            padding: 20,
-            font: { size: 12 }
-          }
+          display: false
         }
       },
       scales: {
@@ -8373,9 +8319,6 @@ function updateRevenueTrendsPeriod(period) {
   const data = getFinanceRevenueTrends(period);
   charts.revenueTrends.data.labels = data.map((d) => d.month_name || '');
   charts.revenueTrends.data.datasets[0].data = data.map((d) => Number(d.revenue || 0));
-  charts.revenueTrends.data.datasets[1].data = data.map((d) => Number(d.confirmed || 0));
-  charts.revenueTrends.data.datasets[2].data = data.map((d) => Number(d.projected || 0));
-  charts.revenueTrends.data.datasets[3].data = data.map((d) => Number(d.previous_year || 0));
   charts.revenueTrends.update('active');
 }
 
