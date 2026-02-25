@@ -860,7 +860,7 @@ class FinanceController
     public function invoicePlansDelete($id)
     {
         Auth::requireAuth();
-        $ok = $this->plans->delete((int)$id);
+        $ok = $this->plans->deleteWithLinkedDocument((int)$id);
         if (!$ok) {
             sendError('DELETE_FAILED', 'Не удалось удалить карточку', 500);
         }

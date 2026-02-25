@@ -382,6 +382,83 @@ class InvoicePlanModel
         return $ok;
     }
 
+    public function deleteWithLinkedDocument($id)
+    {
+        $id = (int)$id;
+        if ($id <= 0) {
+            return false;
+        }
+
+        $this->db->begin_transaction();
+        try {
+            $docId = 0;
+            $stmt = $this->db->prepare("SELECT document_id FROM invoice_plans WHERE id = ? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param('i', $id);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $row = $res ? $res->fetch_assoc() : null;
+                $stmt->close();
+                $docId = (int)($row['document_id'] ?? 0);
+            }
+
+            $stmt = $this->db->prepare("DELETE FROM invoice_plans WHERE id = ?");
+            if (!$stmt) {
+                throw new RuntimeException('Delete plan prepare failed');
+            }
+            $stmt->bind_param('i', $id);
+            $ok = $stmt->execute();
+            $stmt->close();
+            if (!$ok) {
+                throw new RuntimeException('Delete plan execute failed');
+            }
+
+            if ($docId > 0) {
+                $otherPlans = 0;
+                $stmt = $this->db->prepare("SELECT COUNT(*) AS cnt FROM invoice_plans WHERE document_id = ? LIMIT 1");
+                if ($stmt) {
+                    $stmt->bind_param('i', $docId);
+                    $stmt->execute();
+                    $res = $stmt->get_result();
+                    $row = $res ? $res->fetch_assoc() : null;
+                    $stmt->close();
+                    $otherPlans = (int)($row['cnt'] ?? 0);
+                }
+
+                if ($otherPlans <= 0) {
+                    $stmt = $this->db->prepare("DELETE FROM finance_send_events WHERE document_id = ?");
+                    if ($stmt) {
+                        $stmt->bind_param('i', $docId);
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+
+                    if ($this->tableExists('finance_download_events') && $this->tableHasColumn('finance_download_events', 'document_id')) {
+                        $stmt = $this->db->prepare("DELETE FROM finance_download_events WHERE document_id = ?");
+                        if ($stmt) {
+                            $stmt->bind_param('i', $docId);
+                            $stmt->execute();
+                            $stmt->close();
+                        }
+                    }
+
+                    $stmt = $this->db->prepare("DELETE FROM finance_documents WHERE id = ?");
+                    if ($stmt) {
+                        $stmt->bind_param('i', $docId);
+                        $stmt->execute();
+                        $stmt->close();
+                    }
+                }
+            }
+
+            $this->db->commit();
+            return true;
+        } catch (Throwable $e) {
+            $this->db->rollback();
+            return false;
+        }
+    }
+
     public function insertFinanceDocument($plan, $docNumber, $token, $totalSum)
     {
         $periodYear = (int)$plan['period_year'];
@@ -483,5 +560,28 @@ class InvoicePlanModel
         $stmt->close();
 
         return $map;
+    }
+
+    private function tableExists($table)
+    {
+        $table = $this->db->real_escape_string((string)$table);
+        $res = $this->db->query("SHOW TABLES LIKE '{$table}'");
+        $ok = $res && $res->num_rows > 0;
+        if ($res) {
+            $res->close();
+        }
+        return $ok;
+    }
+
+    private function tableHasColumn($table, $column)
+    {
+        $table = $this->db->real_escape_string((string)$table);
+        $column = $this->db->real_escape_string((string)$column);
+        $res = $this->db->query("SHOW COLUMNS FROM `{$table}` LIKE '{$column}'");
+        $ok = $res && $res->num_rows > 0;
+        if ($res) {
+            $res->close();
+        }
+        return $ok;
     }
 }
