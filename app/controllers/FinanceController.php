@@ -682,48 +682,19 @@ class FinanceController
             'send_diadoc' => !empty($payload['send_diadoc']) ? 1 : (int)($project['send_invoice_diadoc'] ?? 0)
         ], JSON_UNESCAPED_UNICODE);
 
-        $existing = $this->plans->findByClientPeriod((int)$project['client_id'], $periodYear, $periodMonth);
-        if ($existing) {
-            $planId = (int)($existing['id'] ?? 0);
-            if ($planId <= 0) {
-                sendError('CREATE_FAILED', 'Не удалось создать счет по проекту', 500);
-            }
-            $okUpdate = $this->plans->updateEditable(
-                $planId,
-                json_encode($items, JSON_UNESCAPED_UNICODE),
-                $channelsJson,
-                $sendDate
-            );
-            if (!$okUpdate) {
-                sendError('UPDATE_FAILED', 'Не удалось обновить существующую карточку счета', 500);
-            }
-            $plan = $this->plans->find($planId);
-        } else {
-            $planId = 0;
-            try {
-                $planId = $this->plans->create(
-                    (int)$project['client_id'],
-                    $periodYear,
-                    $periodMonth,
-                    $periodLabel,
-                    json_encode($items, JSON_UNESCAPED_UNICODE),
-                    $channelsJson,
-                    $sendDate
-                );
-            } catch (Throwable $e) {
-                if (stripos((string)$e->getMessage(), 'Duplicate entry') === false) {
-                    throw $e;
-                }
-            }
-            if ($planId <= 0) {
-                $existingAfterInsert = $this->plans->findByClientPeriod((int)$project['client_id'], $periodYear, $periodMonth);
-                $planId = (int)($existingAfterInsert['id'] ?? 0);
-            }
-            if ($planId <= 0) {
-                sendError('CREATE_FAILED', 'Не удалось создать счет по проекту', 500);
-            }
-            $plan = $this->plans->find($planId);
+        $planId = $this->plans->create(
+            (int)$project['client_id'],
+            $periodYear,
+            $periodMonth,
+            $periodLabel,
+            json_encode($items, JSON_UNESCAPED_UNICODE),
+            $channelsJson,
+            $sendDate
+        );
+        if ($planId <= 0) {
+            sendError('CREATE_FAILED', 'Не удалось создать счет по проекту', 500);
         }
+        $plan = $this->plans->find($planId);
 
         if (!$plan) {
             sendError('NOT_FOUND', 'Созданный счет не найден', 404);
