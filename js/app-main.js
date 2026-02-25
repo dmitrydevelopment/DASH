@@ -7302,6 +7302,22 @@ function createPaymentMatchCandidateCard(inv) {
   };
   const card = createWaitingCard(mapped, !!inv?.is_overdue);
   card.querySelector('.status')?.remove();
+  const infoBadges = Array.from(card.querySelectorAll('.category'));
+  infoBadges.forEach((el) => {
+    const text = String(el.textContent || '').toLowerCase();
+    if (text.includes('дн.') && text.includes('назад')) {
+      el.remove();
+    }
+  });
+  const typeBadge = document.createElement('div');
+  typeBadge.className = 'category';
+  typeBadge.textContent = `Тип: ${inv?.invoice_type === 'project' ? 'Проект' : 'Поддержка'}`;
+  const amountEl = card.querySelector('.amount');
+  if (amountEl && amountEl.parentNode) {
+    amountEl.insertAdjacentElement('afterend', typeBadge);
+  } else {
+    card.appendChild(typeBadge);
+  }
 
   const actions = card.querySelector('.kanban-card-actions');
   const documentId = Number(inv?.id || 0);
