@@ -6494,7 +6494,7 @@ const financeSprint2State = {
   paymentsTab: 'paid',
   paymentsFilters: {
     paid: { dateFrom: '', dateTo: '', client: '' },
-    unknown: { dateFrom: '', dateTo: '' }
+    unknown: { dateFrom: '', dateTo: '', inn: '' }
   },
   paymentMatchModalOperation: null,
   receivables: {
@@ -6503,6 +6503,7 @@ const financeSprint2State = {
   },
   acts: [],
   paymentsSortOrder: { field: null, direction: 'asc' },
+  unknownPaymentsSortOrder: { field: null, direction: 'asc' },
   topDebtorsSortOrder: { field: 'client', direction: 'asc' },
   invoiceTimelineSortOrder: { field: null, direction: 'asc' },
   historyBindDone: false,
@@ -6890,27 +6891,33 @@ function initPaymentsHistory() {
     if (!input) return null;
     return input.closest('.period-selector');
   };
+  const getInnFilterWrap = () => document.getElementById('historyInnSearchWrap');
   const applyHistoryFilterUiFromState = (tab) => {
     const from = document.getElementById('historyDateFrom');
     const to = document.getElementById('historyDateTo');
     const client = document.getElementById('historyClientSearch');
+    const inn = document.getElementById('historyInnSearch');
     const suggestions = document.getElementById('historyClientSuggestions');
     const clientWrap = getClientFilterWrap();
+    const innWrap = getInnFilterWrap();
     const state = tab === 'unknown'
-      ? (financeSprint2State.paymentsFilters.unknown || { dateFrom: '', dateTo: '' })
+      ? (financeSprint2State.paymentsFilters.unknown || { dateFrom: '', dateTo: '', inn: '' })
       : (financeSprint2State.paymentsFilters.paid || { dateFrom: '', dateTo: '', client: '' });
 
     if (from) from.value = state.dateFrom || '';
     if (to) to.value = state.dateTo || '';
     if (client) client.value = tab === 'paid' ? (state.client || '') : '';
+    if (inn) inn.value = tab === 'unknown' ? (state.inn || '') : '';
     if (suggestions) suggestions.style.display = 'none';
     if (clientWrap) clientWrap.style.display = tab === 'paid' ? '' : 'none';
+    if (innWrap) innWrap.style.display = tab === 'unknown' ? '' : 'none';
   };
   const syncHistoryFilterStateFromUi = (tab) => {
     const from = document.getElementById('historyDateFrom')?.value || '';
     const to = document.getElementById('historyDateTo')?.value || '';
     if (tab === 'unknown') {
-      financeSprint2State.paymentsFilters.unknown = { dateFrom: from, dateTo: to };
+      const inn = document.getElementById('historyInnSearch')?.value?.trim() || '';
+      financeSprint2State.paymentsFilters.unknown = { dateFrom: from, dateTo: to, inn };
       return;
     }
     const client = document.getElementById('historyClientSearch')?.value?.trim() || '';
@@ -6951,15 +6958,17 @@ function initPaymentsHistory() {
       const from = document.getElementById('historyDateFrom');
       const to = document.getElementById('historyDateTo');
       const client = document.getElementById('historyClientSearch');
+      const inn = document.getElementById('historyInnSearch');
       const suggestions = document.getElementById('historyClientSuggestions');
       if (financeSprint2State.paymentsTab === 'unknown') {
-        financeSprint2State.paymentsFilters.unknown = { dateFrom: '', dateTo: '' };
+        financeSprint2State.paymentsFilters.unknown = { dateFrom: '', dateTo: '', inn: '' };
       } else {
         financeSprint2State.paymentsFilters.paid = { dateFrom: '', dateTo: '', client: '' };
       }
       if (from) from.value = '';
       if (to) to.value = '';
       if (client) client.value = '';
+      if (inn) inn.value = '';
       if (suggestions) suggestions.style.display = 'none';
       if (financeSprint2State.paymentsTab === 'unknown') {
         loadUnknownPaymentsFromApi();
@@ -7051,8 +7060,10 @@ async function loadUnknownPaymentsFromApi() {
     const filters = financeSprint2State.paymentsFilters.unknown || {};
     const from = filters.dateFrom || '';
     const to = filters.dateTo || '';
+    const inn = filters.inn || '';
     if (from) params.set('date_from', from);
     if (to) params.set('date_to', to);
+    if (inn) params.set('inn', inn);
     params.set('_', String(Date.now()));
     const result = await fetchFinanceJson(`/api.php/finance/payments-unknown?${params.toString()}`);
     const rows = Array.isArray(result?.data?.items) ? result.data.items : [];
@@ -7077,24 +7088,46 @@ async function loadUnknownPaymentsFromApi() {
 function renderUnknownPaymentsTable(data) {
   const container = document.getElementById('paymentsUnknownTable');
   if (!container) return;
-  if (!Array.isArray(data) || data.length === 0) {
+  const rows = Array.isArray(data) ? [...data] : [];
+  if (rows.length === 0) {
     container.innerHTML = '<div class="no-data">Нет неизвестных поступлений</div>';
     return;
+  }
+  const field = financeSprint2State.unknownPaymentsSortOrder.field || null;
+  const direction = financeSprint2State.unknownPaymentsSortOrder.direction || 'asc';
+  if (field) {
+    rows.sort((a, b) => {
+      let aVal = a[field];
+      let bVal = b[field];
+      if (field === 'operation_time') {
+        aVal = aVal ? new Date(aVal).getTime() : 0;
+        bVal = bVal ? new Date(bVal).getTime() : 0;
+      } else if (field === 'amount') {
+        aVal = Number(aVal || 0);
+        bVal = Number(bVal || 0);
+      } else {
+        aVal = String(aVal || '').toLowerCase();
+        bVal = String(bVal || '').toLowerCase();
+      }
+      if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
   }
   container.innerHTML = `
     <table class="data-table">
       <thead>
         <tr>
-          <th>Дата</th>
-          <th>Плательщик</th>
-          <th>ИНН</th>
+          <th style="cursor: pointer;" onclick="sortUnknownPaymentsTable('operation_time')">Дата ↕</th>
+          <th style="cursor: pointer;" onclick="sortUnknownPaymentsTable('counterparty_name')">Плательщик ↕</th>
+          <th style="cursor: pointer;" onclick="sortUnknownPaymentsTable('counterparty_inn')">ИНН ↕</th>
           <th>Назначение</th>
-          <th>Сумма</th>
+          <th style="cursor: pointer;" onclick="sortUnknownPaymentsTable('amount')">Сумма ↕</th>
           <th>Действие</th>
         </tr>
       </thead>
       <tbody>
-        ${data.map((row) => `
+        ${rows.map((row) => `
           <tr>
             <td>${row.operation_time ? new Date(row.operation_time).toLocaleDateString('ru-RU') : '—'}</td>
             <td>${escapeHtml(row.counterparty_name || '—')}</td>
@@ -7107,6 +7140,17 @@ function renderUnknownPaymentsTable(data) {
       </tbody>
     </table>
   `;
+}
+
+function sortUnknownPaymentsTable(field) {
+  if (financeSprint2State.unknownPaymentsSortOrder.field === field) {
+    financeSprint2State.unknownPaymentsSortOrder.direction =
+      financeSprint2State.unknownPaymentsSortOrder.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    financeSprint2State.unknownPaymentsSortOrder.field = field;
+    financeSprint2State.unknownPaymentsSortOrder.direction = 'asc';
+  }
+  renderUnknownPaymentsTable(financeSprint2State.unknownPayments || []);
 }
 
 function sortPaymentsTable(field) {
@@ -7222,9 +7266,20 @@ function createPaymentMatchCandidateCard(inv) {
     payment_due_days: Number(inv?.payment_due_days || 0)
   };
   const card = createWaitingCard(mapped, !!inv?.is_overdue);
+  card.querySelector('.status')?.remove();
+
   const actions = card.querySelector('.kanban-card-actions');
   const documentId = Number(inv?.id || 0);
+  const planId = Number(inv?.plan_id || 0);
   if (actions && documentId > 0) {
+    const reminderBtn = actions.querySelector('button[onclick*="sendReminder"]');
+    if (reminderBtn) reminderBtn.remove();
+    const editBtn = actions.querySelector('button[onclick*="openInvoicePlanEdit"]');
+    if (editBtn && planId > 0) {
+      editBtn.removeAttribute('onclick');
+      editBtn.addEventListener('click', () => openInvoicePlanEditFromPaymentMatch(planId));
+    }
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'action-btn action-btn--edit';
@@ -7233,6 +7288,15 @@ function createPaymentMatchCandidateCard(inv) {
     actions.insertBefore(btn, actions.firstChild || null);
   }
   return card;
+}
+
+function openInvoicePlanEditFromPaymentMatch(planId) {
+  const id = Number(planId || 0);
+  if (!Number.isFinite(id) || id <= 0) return;
+  closePaymentMatchModal();
+  setTimeout(() => {
+    openInvoicePlanEdit(id);
+  }, 50);
 }
 
 async function confirmPaymentMatch(documentId) {

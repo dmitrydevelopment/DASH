@@ -513,6 +513,7 @@ class FinanceController
         $dateFrom = isset($_GET['date_from']) ? trim((string)$_GET['date_from']) : '';
         $dateTo = isset($_GET['date_to']) ? trim((string)$_GET['date_to']) : '';
         $query = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+        $inn = isset($_GET['inn']) ? trim((string)$_GET['inn']) : '';
         if ($dateFrom !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) $dateFrom = '';
         if ($dateTo !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) $dateTo = '';
 
@@ -542,6 +543,11 @@ class FinanceController
             $params[] = $like;
             $params[] = $like;
             $params[] = $like;
+        }
+        if ($inn !== '') {
+            $where[] = "bo.$innCol LIKE ?";
+            $types .= 's';
+            $params[] = '%' . $inn . '%';
         }
 
         $sql = "SELECT bo.id, bo.operation_id, bo.amount, bo.currency, bo.$timeCol AS operation_time,
