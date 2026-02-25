@@ -27,6 +27,7 @@ $accountNumber = isset($settings['finance_tbank_account_number']) ? (string) $se
 $tbankToken = isset($settings['tinkoff_business_token']) ? (string) $settings['tinkoff_business_token'] : '';
 
 if ($accountNumber === '' || $tbankToken === '') {
+    saveSyncState($db, '', 'SETTINGS_MISSING');
     echo "SETTINGS_MISSING\n";
     exit(1);
 }
@@ -41,18 +42,21 @@ $cursor = loadCursor($db);
 
 $totalOps = 0;
 $page = 0;
+$syncError = '';
 
 while (true) {
     $page++;
 
     $resp = $tbank->getStatement($accountNumber, $from, $to, $cursor);
     if (!$resp[0]) {
-        echo "TBANK_FAIL err={$resp[1]}\n";
+        $syncError = "TBANK_FAIL err={$resp[1]}";
+        echo $syncError . "\n";
         break;
     }
 
     $data = $resp[2];
     if (!is_array($data)) {
+        $syncError = 'TBANK_BAD_JSON';
         echo "TBANK_BAD_JSON\n";
         break;
     }
@@ -78,12 +82,14 @@ while (true) {
     }
 
     $cursor = $nextCursor;
-    saveCursor($db, $cursor);
+    saveSyncState($db, $cursor, '');
 
     if ($page >= $PAGE_LIMIT) {
         break;
     }
 }
+
+saveSyncState($db, $cursor, $syncError);
 
 echo "OPS_SAVED={$totalOps}\n";
 echo "DONE\n";
@@ -103,7 +109,7 @@ function loadCursor(mysqli $db)
     return '';
 }
 
-function saveCursor(mysqli $db, $cursor)
+function saveSyncState(mysqli $db, $cursor, $lastError = '')
 {
     if (!tableExists($db, 'finance_sync_state')) return;
 
@@ -120,6 +126,11 @@ function saveCursor(mysqli $db, $cursor)
         $sets = ["{$cursorCol} = ?"];
         $types = 's';
         $values = [$cursor];
+        if (columnExists($db, 'finance_sync_state', 'last_error')) {
+            $sets[] = "last_error = ?";
+            $types .= 's';
+            $values[] = (string)$lastError;
+        }
         if (columnExists($db, 'finance_sync_state', 'last_run_at')) {
             $sets[] = "last_run_at = ?";
             $types .= 's';
@@ -137,6 +148,11 @@ function saveCursor(mysqli $db, $cursor)
         $fields = ['id', $cursorCol];
         $types = 'is';
         $values = [1, $cursor];
+        if (columnExists($db, 'finance_sync_state', 'last_error')) {
+            $fields[] = 'last_error';
+            $types .= 's';
+            $values[] = (string)$lastError;
+        }
         if (columnExists($db, 'finance_sync_state', 'last_run_at')) {
             $fields[] = 'last_run_at';
             $types .= 's';
