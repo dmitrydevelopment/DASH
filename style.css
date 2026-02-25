@@ -4645,8 +4645,8 @@ body {
   }
 }
 
-.modal-form input.crmNotificationTriggerTelegram,
-.modal-form input.crmNotificationTriggerEmail {
+#crmNotificationTriggersList input.crmNotificationTriggerTelegram,
+#crmNotificationTriggersList input.crmNotificationTriggerEmail {
   width: auto;
 }
 
