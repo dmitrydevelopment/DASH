@@ -7133,6 +7133,7 @@ function renderUnknownPaymentsTable(data) {
           <th style="cursor: pointer;" onclick="sortUnknownPaymentsTable('counterparty_inn')">ИНН ↕</th>
           <th>Назначение</th>
           <th style="cursor: pointer;" onclick="sortUnknownPaymentsTable('amount')">Сумма ↕</th>
+          <th>Детали</th>
           <th>Действие</th>
         </tr>
       </thead>
@@ -7144,6 +7145,7 @@ function renderUnknownPaymentsTable(data) {
             <td>${escapeHtml(row.counterparty_inn || '—')}</td>
             <td>${escapeHtml(row.description || '—')}</td>
             <td style="text-align:right;">${formatCurrency(Number(row.amount || 0))}</td>
+            <td><button type="button" class="btn btn--secondary" onclick="openUnknownPaymentDetails(${JSON.stringify(String(row.operation_id || ''))})">Показать</button></td>
             <td><button type="button" class="btn btn--primary" onclick="openPaymentMatchModal('${escapeHtml(String(row.operation_id || ''))}')">Найти счет</button></td>
           </tr>
         `).join('')}
@@ -7161,6 +7163,33 @@ function sortUnknownPaymentsTable(field) {
     financeSprint2State.unknownPaymentsSortOrder.direction = 'asc';
   }
   renderUnknownPaymentsTable(financeSprint2State.unknownPayments || []);
+}
+
+function openUnknownPaymentDetails(operationId) {
+  const op = (financeSprint2State.unknownPayments || []).find((x) => String(x.operation_id || '') === String(operationId || ''));
+  const modal = document.getElementById('unknownPaymentDetailsModal');
+  const rawEl = document.getElementById('unknownPaymentDetailsRaw');
+  if (!modal || !rawEl) return;
+
+  let raw = String(op?.raw_json || '').trim();
+  if (!raw) {
+    rawEl.textContent = 'Сырые данные банка отсутствуют';
+    modal.classList.add('active');
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    rawEl.textContent = JSON.stringify(parsed, null, 2);
+  } catch (e) {
+    rawEl.textContent = raw;
+  }
+  modal.classList.add('active');
+}
+
+function closeUnknownPaymentDetailsModal() {
+  const modal = document.getElementById('unknownPaymentDetailsModal');
+  if (modal) modal.classList.remove('active');
 }
 
 function sortPaymentsTable(field) {

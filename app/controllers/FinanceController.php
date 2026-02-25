@@ -521,6 +521,7 @@ class FinanceController
         $descCol = $this->hasBankOperationColumn('description') ? 'description' : ($this->hasBankOperationColumn('purpose') ? 'purpose' : "''");
         $nameCol = $this->hasBankOperationColumn('counterparty_name') ? 'counterparty_name' : "''";
         $innCol = $this->hasBankOperationColumn('counterparty_inn') ? 'counterparty_inn' : "''";
+        $rawCol = $this->hasBankOperationColumn('raw_json') ? 'raw_json' : "''";
 
         $where = ["(bo.matched_document_id IS NULL OR bo.matched_document_id = 0)"];
         $types = '';
@@ -551,7 +552,8 @@ class FinanceController
         }
 
         $sql = "SELECT bo.id, bo.operation_id, bo.amount, bo.currency, bo.$timeCol AS operation_time,
-                       bo.$descCol AS description, bo.$nameCol AS counterparty_name, bo.$innCol AS counterparty_inn
+                       bo.$descCol AS description, bo.$nameCol AS counterparty_name, bo.$innCol AS counterparty_inn,
+                       bo.$rawCol AS raw_json
                 FROM finance_bank_operations bo
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY bo.$timeCol DESC, bo.id DESC
@@ -577,6 +579,7 @@ class FinanceController
                 'description' => (string)($row['description'] ?? ''),
                 'counterparty_name' => (string)($row['counterparty_name'] ?? ''),
                 'counterparty_inn' => (string)($row['counterparty_inn'] ?? ''),
+                'raw_json' => (string)($row['raw_json'] ?? ''),
             ];
             $total += $amount;
         }

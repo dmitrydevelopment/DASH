@@ -4661,6 +4661,21 @@ body {
   appearance: textfield;
 }
 
+.unknown-payment-raw {
+  margin: 0;
+  padding: var(--space-12);
+  background: var(--glass-bg-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-base);
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 60vh;
+  overflow: auto;
+}
+
 /* Редактор расписания */
 .schedule-editor {
   display: flex;
