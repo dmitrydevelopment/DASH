@@ -213,6 +213,15 @@ class FinanceController
             }
         }
 
+        $orphanInvoices = $this->fetchOrphanUnpaidInvoicesForKanban($paymentDueDays);
+        foreach ($orphanInvoices as $row) {
+            if ((int)($row['days_since_sent'] ?? 0) > $paymentDueDays) {
+                $waitingOverdue[] = $row;
+            } else {
+                $waitingRecent[] = $row;
+            }
+        }
+
         $sortBySentAtDesc = function (array $a, array $b) {
             $aTs = !empty($a['sent_at']) ? strtotime((string)$a['sent_at']) : 0;
             $bTs = !empty($b['sent_at']) ? strtotime((string)$b['sent_at']) : 0;
@@ -1551,6 +1560,86 @@ endobj
             }
         }
         return isset($this->invoicePlanColumns[$name]);
+    }
+
+    private function fetchOrphanUnpaidInvoicesForKanban($paymentDueDays)
+    {
+        $hasIsPaid = $this->hasFinanceDocColumn('is_paid');
+        $hasPaidStatus = $this->hasFinanceDocColumn('paid_status');
+        $where = ["d.doc_type = 'invoice'", "ip.id IS NULL"];
+        if ($hasIsPaid && $hasPaidStatus) {
+            $where[] = "NOT (COALESCE(d.is_paid, 0) = 1 OR d.paid_status = 'paid')";
+        } elseif ($hasIsPaid) {
+            $where[] = "COALESCE(d.is_paid, 0) = 0";
+        } elseif ($hasPaidStatus) {
+            $where[] = "(d.paid_status IS NULL OR d.paid_status <> 'paid')";
+        } else {
+            return [];
+        }
+
+        $sql = "SELECT d.id, d.client_id, c.name AS client_name, c.email, d.total_sum, d.doc_date, d.due_date,
+                       d.period_year, d.period_month, d.download_token,
+                       (
+                         SELECT fd_act.download_token
+                         FROM finance_documents fd_act
+                         WHERE fd_act.doc_type = 'act'
+                           AND fd_act.client_id = d.client_id
+                           AND fd_act.period_year = d.period_year
+                           AND fd_act.period_month = d.period_month
+                         ORDER BY fd_act.id DESC
+                         LIMIT 1
+                       ) AS act_download_token
+                FROM finance_documents d
+                INNER JOIN clients c ON c.id = d.client_id
+                LEFT JOIN invoice_plans ip ON ip.document_id = d.id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY d.doc_date DESC, d.id DESC
+                LIMIT 2000";
+
+        $res = $this->db->query($sql);
+        if (!$res) {
+            return [];
+        }
+
+        $out = [];
+        while ($row = $res->fetch_assoc()) {
+            $docId = (int)($row['id'] ?? 0);
+            if ($docId <= 0) {
+                continue;
+            }
+            $sentTs = !empty($row['doc_date']) ? strtotime((string)$row['doc_date']) : time();
+            if ($sentTs === false) {
+                $sentTs = time();
+            }
+            $daysSinceSent = max(0, (int)floor((time() - $sentTs) / 86400));
+            $out[] = [
+                // negative id => no edit/delete/reminder actions in Kanban UI
+                'id' => -$docId,
+                'document_id' => $docId,
+                'client_id' => (int)($row['client_id'] ?? 0),
+                'client_name' => (string)($row['client_name'] ?? '—'),
+                'email' => (string)($row['email'] ?? ''),
+                'status' => 'sent_waiting_payment',
+                'total_sum' => (float)($row['total_sum'] ?? 0),
+                'period_label' => sprintf('%02d.%04d', (int)($row['period_month'] ?? 0), (int)($row['period_year'] ?? 0)),
+                'created_date' => !empty($row['doc_date']) ? date('d.m.Y', strtotime((string)$row['doc_date'])) : '—',
+                'sent_date' => !empty($row['doc_date']) ? date('d.m.Y', strtotime((string)$row['doc_date'])) : '—',
+                'sent_at' => date('Y-m-d H:i:s', $sentTs),
+                'payment_due_days' => (int)$paymentDueDays,
+                'days_since_sent' => $daysSinceSent,
+                'items_snapshot' => [],
+                'invoice_download_url' => !empty($row['download_token'])
+                    ? '/api.php/finance/download?token=' . rawurlencode((string)$row['download_token'])
+                    : null,
+                'act_download_url' => !empty($row['act_download_token'])
+                    ? '/api.php/finance/download?token=' . rawurlencode((string)$row['act_download_token'])
+                    : null,
+                'is_orphan_document' => 1,
+            ];
+        }
+        $res->close();
+
+        return $out;
     }
 
     private function bindStmtParams(mysqli_stmt $stmt, $types, array $params)

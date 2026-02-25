@@ -383,7 +383,13 @@ function normalizeInvoicePlanRow(item) {
   const out = { ...item };
   const rows = Array.isArray(item.items_snapshot) ? item.items_snapshot : [];
   out.items_snapshot = rows;
-  out.total_sum = rows.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+  if (rows.length > 0) {
+    out.total_sum = rows.reduce((sum, line) => sum + Number(line.amount || 0), 0);
+  } else if (typeof item.total_sum !== 'undefined' && item.total_sum !== null) {
+    out.total_sum = Number(item.total_sum || 0);
+  } else {
+    out.total_sum = 0;
+  }
   return out;
 }
 
