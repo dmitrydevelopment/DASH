@@ -3434,11 +3434,13 @@ function resetNotificationTriggersUI() {
         <div class="form-group crm-notification-trigger-event">
           <input type="text" class="crmNotificationTriggerEvent" placeholder="Код события (пример: finance.unknown_payment.created)" autocomplete="off">
         </div>
-        <div class="form-group form-group--inline-checkboxes crm-notification-trigger-checks">
+        <div class="form-group form-group--inline-checkboxes crm-notification-trigger-check crm-notification-trigger-check--tg">
           <label class="inline-checkbox">
             <input type="checkbox" class="crmNotificationTriggerTelegram" checked>
             <span>Телеграм</span>
           </label>
+        </div>
+        <div class="form-group form-group--inline-checkboxes crm-notification-trigger-check crm-notification-trigger-check--email">
           <label class="inline-checkbox">
             <input type="checkbox" class="crmNotificationTriggerEmail">
             <span>Email</span>
@@ -3467,11 +3469,13 @@ function addNotificationTriggerRow(name, eventCode, sendTelegram, sendEmail) {
       <div class="form-group crm-notification-trigger-event">
         <input type="text" class="crmNotificationTriggerEvent" placeholder="Код события (пример: finance.unknown_payment.created)" autocomplete="off">
       </div>
-      <div class="form-group form-group--inline-checkboxes crm-notification-trigger-checks">
+      <div class="form-group form-group--inline-checkboxes crm-notification-trigger-check crm-notification-trigger-check--tg">
         <label class="inline-checkbox">
           <input type="checkbox" class="crmNotificationTriggerTelegram" checked>
           <span>Телеграм</span>
         </label>
+      </div>
+      <div class="form-group form-group--inline-checkboxes crm-notification-trigger-check crm-notification-trigger-check--email">
         <label class="inline-checkbox">
           <input type="checkbox" class="crmNotificationTriggerEmail">
           <span>Email</span>

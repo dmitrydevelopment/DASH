@@ -4569,7 +4569,7 @@ body {
 }
 
 .crm-notification-trigger-row {
-  grid-template-columns: 50% 20% 20% 10%;
+  grid-template-columns: 50% 25% 10% 10% 5%;
   gap: var(--space-12);
   align-items: end;
 }
@@ -4586,8 +4586,12 @@ body {
   min-width: 0;
 }
 
-.crm-notification-trigger-row .crm-notification-trigger-checks .inline-checkbox {
+.crm-notification-trigger-row .crm-notification-trigger-check .inline-checkbox {
   font-size: 12px;
+}
+
+.crm-notification-trigger-row .crm-notification-trigger-check {
+  justify-content: flex-start;
 }
 
 .crm-notification-trigger-row .crm-notification-trigger-trash {
