@@ -185,9 +185,18 @@ class InvoicePlanModel
 
         $stmt = $this->db->prepare("INSERT INTO finance_documents
             (doc_type, client_id, period_year, period_month, doc_date, due_date, doc_number, total_sum, currency,
-             file_rel_path, download_token, is_paid, paid_sum, created_at, updated_at)
+              file_rel_path, download_token, is_paid, paid_sum, created_at, updated_at)
             VALUES
-            ('invoice', ?, ?, ?, ?, ?, ?, ?, 'RUB', ?, ?, 0, 0, NOW(), NOW())");
+            ('invoice', ?, ?, ?, ?, ?, ?, ?, 'RUB', ?, ?, 0, 0, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE
+                id = LAST_INSERT_ID(id),
+                doc_date = VALUES(doc_date),
+                due_date = VALUES(due_date),
+                doc_number = VALUES(doc_number),
+                total_sum = VALUES(total_sum),
+                file_rel_path = VALUES(file_rel_path),
+                download_token = VALUES(download_token),
+                updated_at = NOW()");
 
         $stmt->bind_param('iiisssdss', $clientId, $periodYear, $periodMonth, $docDate, $dueDate, $docNumber, $totalSum, $filePath, $token);
 
@@ -203,7 +212,15 @@ class InvoicePlanModel
         $recipientHash = sha1(mb_strtolower((string)$recipient));
         $stmt = $this->db->prepare("INSERT INTO finance_send_events
             (document_id, channel, recipient, recipient_hash, status, attempts, last_attempt_at, success_at, last_error, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 1, NOW(), ?, ?, NOW(), NOW())");
+            VALUES (?, ?, ?, ?, ?, 1, NOW(), ?, ?, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE
+                status = VALUES(status),
+                recipient = VALUES(recipient),
+                attempts = attempts + 1,
+                last_attempt_at = NOW(),
+                success_at = CASE WHEN VALUES(status) = 'success' THEN VALUES(success_at) ELSE success_at END,
+                last_error = VALUES(last_error),
+                updated_at = NOW()");
 
         $successAt = $status === 'success' ? date('Y-m-d H:i:s') : null;
         $stmt->bind_param('issssss', $documentId, $channel, $recipient, $recipientHash, $status, $successAt, $error);
