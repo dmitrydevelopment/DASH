@@ -4569,8 +4569,8 @@ body {
 }
 
 .crm-notification-trigger-row {
-  grid-template-columns: 50% 25% 10% 10% 5%;
-  gap: var(--space-12);
+  grid-template-columns: minmax(0, 50fr) minmax(0, 25fr) minmax(0, 8fr) minmax(0, 8fr) minmax(0, 9fr);
+  gap: var(--space-8);
   align-items: end;
 }
 
@@ -4583,6 +4583,10 @@ body {
 
 .crm-notification-trigger-row .crm-notification-trigger-event,
 .crm-notification-trigger-row .crm-notification-trigger-event input {
+  min-width: 0;
+}
+
+.crm-notification-trigger-row .form-group {
   min-width: 0;
 }
 
