@@ -4555,6 +4555,55 @@ body {
   max-width: 520px;
 }
 
+.payment-match-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.payment-match-field {
+  width: 100%;
+  display: block;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  position: relative;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.payment-match-field label {
+  display: block;
+  margin-bottom: var(--space-4);
+}
+
+.payment-match-field .period-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.payment-match-actions {
+  display: flex;
+  margin-bottom: 12px;
+}
+
+.payment-match-actions .btn {
+  width: 100%;
+}
+
+#paymentMatchAmount::-webkit-inner-spin-button,
+#paymentMatchAmount::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+#paymentMatchAmount {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 /* Редактор расписания */
 .schedule-editor {
   display: flex;

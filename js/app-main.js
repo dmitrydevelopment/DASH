@@ -6606,7 +6606,7 @@ function ensureFinanceClientAutocompleteBinding() {
     if (target && target.closest && target.closest('.finance-client-suggestion-item')) {
       return;
     }
-    ['historyClientSuggestions', 'receivablesClientSuggestions', 'actsClientSuggestions'].forEach((id) => {
+    ['historyClientSuggestions', 'receivablesClientSuggestions', 'actsClientSuggestions', 'paymentMatchClientSuggestions'].forEach((id) => {
       const box = document.getElementById(id);
       if (box) {
         box.style.display = 'none';
@@ -6884,6 +6884,7 @@ function updateRevenueTrendsPeriod(period) {
 
 function initPaymentsHistory() {
   bindFinanceClientAutocomplete('historyClientSearch', 'historyClientSuggestions');
+  bindFinanceClientAutocomplete('paymentMatchClient', 'paymentMatchClientSuggestions');
   const getClientFilterWrap = () => {
     const input = document.getElementById('historyClientSearch');
     if (!input) return null;
