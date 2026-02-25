@@ -4604,7 +4604,7 @@ body {
   max-width: 120px;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1050px) {
   .crm-notification-trigger-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
     gap: var(--space-12);
@@ -4643,6 +4643,11 @@ body {
     grid-column: 1 / -1;
     justify-content: flex-end;
   }
+}
+
+.crmNotificationTriggerTelegram,
+.crmNotificationTriggerEmail {
+  width: auto;
 }
 
 .inline-checkbox {
