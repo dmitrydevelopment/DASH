@@ -7949,6 +7949,15 @@ function removeAddClientButtons() {
 }
 
 const financeSprint2State = {
+  overview: {
+    income_total: 0,
+    income_categories: [],
+    expense_total: 0,
+    expense_fixed: 0,
+    expense_salaries: 0,
+    profit_total: 0,
+    profit_margin_percent: 0
+  },
   payments: [],
   receivables: {
     top_debtors: [],
@@ -7978,6 +7987,157 @@ async function fetchFinanceJson(url) {
     throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
   }
   return resp.json();
+}
+
+function initFinanceOverview() {
+  loadFinanceOverviewFromApi();
+  initRevenueTrendsChart();
+}
+
+async function loadFinanceOverviewFromApi() {
+  try {
+    const result = await fetchFinanceJson(`/api.php/finance/overview?_=${Date.now()}`);
+    financeSprint2State.overview = result?.data || financeSprint2State.overview;
+    renderFinanceOverviewCards();
+    initCategoryChart();
+    initIncomeExpenseChart();
+    initRevenueTable();
+  } catch (err) {
+    console.error('loadFinanceOverviewFromApi failed', err);
+    showToast('Не удалось загрузить обзор финансов', 'error');
+  }
+}
+
+function renderFinanceOverviewCards() {
+  const data = financeSprint2State.overview || {};
+  const incomeEl = document.getElementById('financeOverviewIncomeTotal');
+  const incomeBreakdownEl = document.getElementById('financeOverviewIncomeBreakdown');
+  const expenseEl = document.getElementById('financeOverviewExpenseTotal');
+  const expenseSalariesEl = document.getElementById('financeOverviewExpenseSalaries');
+  const expenseFixedEl = document.getElementById('financeOverviewExpenseFixed');
+  const profitEl = document.getElementById('financeOverviewProfitTotal');
+  const marginEl = document.getElementById('financeOverviewMargin');
+
+  if (incomeEl) incomeEl.textContent = formatCurrency(Number(data.income_total || 0));
+  if (expenseEl) expenseEl.textContent = formatCurrency(Number(data.expense_total || 0));
+  if (expenseSalariesEl) expenseSalariesEl.textContent = formatCurrency(Number(data.expense_salaries || 0));
+  if (expenseFixedEl) expenseFixedEl.textContent = formatCurrency(Number(data.expense_fixed || 0));
+  if (profitEl) profitEl.textContent = formatCurrency(Number(data.profit_total || 0));
+  if (marginEl) marginEl.textContent = `Маржа: ${Number(data.profit_margin_percent || 0)}%`;
+
+  const categories = Array.isArray(data.income_categories) ? data.income_categories : [];
+  if (incomeBreakdownEl) {
+    incomeBreakdownEl.innerHTML = categories.map((cat) => `
+      <div class="breakdown-item">
+        <span>${escapeHtml(cat.name || 'Без категории')}:</span>
+        <span>${formatCurrency(Number(cat.amount || 0))}</span>
+      </div>
+    `).join('');
+  }
+}
+
+function initCategoryChart() {
+  const ctx = document.getElementById('categoryChart');
+  if (!ctx) return;
+  if (charts.category) {
+    charts.category.destroy();
+  }
+  const categories = Array.isArray(financeSprint2State.overview?.income_categories)
+    ? financeSprint2State.overview.income_categories
+    : [];
+  const labels = categories.map((c) => c.name || 'Без категории');
+  const values = categories.map((c) => Number(c.amount || 0));
+  const colors = ['#1FB8CD', '#FFC185', '#B4413C', '#ECEBD5', '#5D878F', '#22C55E', '#EF4444'];
+  charts.category = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: labels.map((_, i) => colors[i % colors.length]),
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: 'rgba(255, 255, 255, 0.8)', padding: 20, font: { size: 12 } }
+        }
+      }
+    }
+  });
+}
+
+function initIncomeExpenseChart() {
+  const ctx = document.getElementById('incomeExpenseChart');
+  if (!ctx) return;
+  if (charts.incomeExpense) {
+    charts.incomeExpense.destroy();
+  }
+  const d = financeSprint2State.overview || {};
+  const income = Number(d.income_total || 0);
+  const expense = Number(d.expense_total || 0);
+  const profit = Number(d.profit_total || 0);
+  charts.incomeExpense = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Доходы', 'Расходы', 'Прибыль'],
+      datasets: [{
+        data: [income, expense, profit],
+        backgroundColor: ['#10B981', '#EF4444', '#3B82F6'],
+        borderRadius: 8,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255, 255, 255, 0.1)' },
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.7)',
+            callback: function(value) { return formatCurrency(value); }
+          }
+        },
+        x: {
+          grid: { display: false },
+          ticks: { color: 'rgba(255, 255, 255, 0.7)' }
+        }
+      }
+    }
+  });
+}
+
+function initRevenueTable() {
+  const container = document.getElementById('revenueTable');
+  if (!container) return;
+  const categories = Array.isArray(financeSprint2State.overview?.income_categories)
+    ? financeSprint2State.overview.income_categories
+    : [];
+  container.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Категория</th>
+          <th>Сумма</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${categories.map((cat) => `
+          <tr>
+            <td>${escapeHtml(cat.name || 'Без категории')}</td>
+            <td style="text-align:right;">${formatCurrency(Number(cat.amount || 0))}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 function initPaymentsHistory() {

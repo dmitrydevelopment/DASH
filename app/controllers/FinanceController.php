@@ -13,6 +13,7 @@ class FinanceController
     private $plans;
     private $projects;
     private $financeDocColumns = null;
+    private $settingsColumns = null;
 
     public function __construct(mysqli $db)
     {
@@ -294,6 +295,89 @@ class FinanceController
                     'mrr' => $mrr
                 ]
             ]
+        ]);
+    }
+
+    public function overview()
+    {
+        Auth::requireAuth();
+
+        $monthIncome = 0.0;
+        $resIncome = $this->db->query("SELECT SUM(service_price) AS total_income FROM client_invoice_items");
+        if ($resIncome) {
+            $row = $resIncome->fetch_assoc();
+            $monthIncome = (float)($row['total_income'] ?? 0);
+            $resIncome->close();
+        }
+
+        $salaryExpense = 0.0;
+        $resSalary = $this->db->query("SELECT SUM(salary_monthly) AS salary_total FROM employees");
+        if ($resSalary) {
+            $row = $resSalary->fetch_assoc();
+            $salaryExpense = (float)($row['salary_total'] ?? 0);
+            $resSalary->close();
+        }
+
+        $fixedExpense = 0.0;
+        if ($this->hasSettingsColumn('finance_total_expense')) {
+            $resSettings = $this->db->query("SELECT finance_total_expense FROM crm_settings WHERE id = 1 LIMIT 1");
+            if ($resSettings) {
+                $row = $resSettings->fetch_assoc();
+                $fixedExpense = (float)($row['finance_total_expense'] ?? 0);
+                $resSettings->close();
+            }
+        }
+
+        $categories = [];
+        $resPlans = $this->db->query("SELECT work_items_json FROM invoice_plans ORDER BY id DESC LIMIT 1000");
+        if ($resPlans) {
+            while ($row = $resPlans->fetch_assoc()) {
+                $items = json_decode((string)($row['work_items_json'] ?? '[]'), true);
+                if (!is_array($items)) continue;
+                foreach ($items as $line) {
+                    $name = trim((string)($line['category'] ?? ''));
+                    if ($name === '') {
+                        $name = 'Без категории';
+                    }
+                    $amount = (float)($line['amount'] ?? 0);
+                    if (!isset($categories[$name])) {
+                        $categories[$name] = 0.0;
+                    }
+                    $categories[$name] += $amount;
+                }
+            }
+            $resPlans->close();
+        }
+
+        if (empty($categories)) {
+            $categories['Без категории'] = $monthIncome;
+        }
+
+        $categoriesOut = [];
+        foreach ($categories as $name => $amount) {
+            $categoriesOut[] = [
+                'name' => (string)$name,
+                'amount' => (float)$amount,
+            ];
+        }
+        usort($categoriesOut, function ($a, $b) {
+            return (float)$b['amount'] <=> (float)$a['amount'];
+        });
+
+        $totalExpense = $fixedExpense + $salaryExpense;
+        $profit = $monthIncome - $totalExpense;
+        $margin = $monthIncome > 0 ? round(($profit / $monthIncome) * 100, 1) : 0.0;
+
+        sendJson([
+            'data' => [
+                'income_total' => $monthIncome,
+                'income_categories' => $categoriesOut,
+                'expense_total' => $totalExpense,
+                'expense_fixed' => $fixedExpense,
+                'expense_salaries' => $salaryExpense,
+                'profit_total' => $profit,
+                'profit_margin_percent' => $margin,
+            ],
         ]);
     }
 
@@ -1268,6 +1352,25 @@ endobj
             }
         }
         return isset($this->financeDocColumns[$name]);
+    }
+
+    private function hasSettingsColumn($name)
+    {
+        $name = (string)$name;
+        if ($name === '') {
+            return false;
+        }
+        if ($this->settingsColumns === null) {
+            $this->settingsColumns = [];
+            $res = $this->db->query('SHOW COLUMNS FROM crm_settings');
+            if ($res) {
+                while ($row = $res->fetch_assoc()) {
+                    $this->settingsColumns[(string)$row['Field']] = true;
+                }
+                $res->close();
+            }
+        }
+        return isset($this->settingsColumns[$name]);
     }
 
     private function bindStmtParams(mysqli_stmt $stmt, $types, array $params)

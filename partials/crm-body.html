@@ -299,52 +299,27 @@
                 <div class="finance-overview">
                     <div class="finance-card income">
                         <h3>Общий доход</h3>
-                        <div class="finance-value">955,650 ₽</div>
-                        <div class="finance-breakdown">
-                            <div class="breakdown-item">
-                                <span>Разработка:</span>
-                                <span>966,650 ₽</span>
-                            </div>
-                            <div class="breakdown-item">
-                                <span>SEO:</span>
-                                <span>155,000 ₽</span>
-                            </div>
-                            <div class="breakdown-item">
-                                <span>Поддержка:</span>
-                                <span>68,000 ₽</span>
-                            </div>
-                            <div class="breakdown-item">
-                                <span>Боты:</span>
-                                <span>7,000 ₽</span>
-                            </div>
-                        </div>
+                        <div class="finance-value" id="financeOverviewIncomeTotal">0 ₽</div>
+                        <div class="finance-breakdown" id="financeOverviewIncomeBreakdown"></div>
                     </div>
                     <div class="finance-card expenses">
                         <h3>Общий расход</h3>
-                        <div class="finance-value">378,850 ₽</div>
+                        <div class="finance-value" id="financeOverviewExpenseTotal">0 ₽</div>
                         <div class="finance-breakdown">
                             <div class="breakdown-item">
                                 <span>Зарплаты:</span>
-                                <span>132,500 ₽</span>
+                                <span id="financeOverviewExpenseSalaries">0 ₽</span>
                             </div>
                             <div class="breakdown-item">
-                                <span>Дом:</span>
-                                <span>92,350 ₽</span>
-                            </div>
-                            <div class="breakdown-item">
-                                <span>Кредиты:</span>
-                                <span>124,500 ₽</span>
-                            </div>
-                            <div class="breakdown-item">
-                                <span>Прочее:</span>
-                                <span>29,500 ₽</span>
+                                <span>Прочие расходы:</span>
+                                <span id="financeOverviewExpenseFixed">0 ₽</span>
                             </div>
                         </div>
                     </div>
                     <div class="finance-card profit">
                         <h3>Чистая прибыль</h3>
-                        <div class="finance-value profit-value">576,800 ₽</div>
-                        <div class="profit-margin">Маржа: 60.3%</div>
+                        <div class="finance-value profit-value" id="financeOverviewProfitTotal">0 ₽</div>
+                        <div class="profit-margin" id="financeOverviewMargin">Маржа: 0%</div>
                     </div>
                 </div>
 
