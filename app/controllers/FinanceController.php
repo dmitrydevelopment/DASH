@@ -642,10 +642,8 @@ class FinanceController
             sendError('NOT_FOUND', 'Проект не найден', 404);
         }
         $payload = getJsonPayload();
-        $sendDate = trim((string)($payload['send_date'] ?? date('Y-m-d')));
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $sendDate)) {
-            $sendDate = date('Y-m-d');
-        }
+        // For project-origin invoices we always treat send date as "today".
+        $sendDate = date('Y-m-d');
 
         $periodYear = (int)date('Y', strtotime($sendDate));
         $periodMonth = (int)date('m', strtotime($sendDate));
@@ -669,7 +667,8 @@ class FinanceController
         ], JSON_UNESCAPED_UNICODE);
 
         $existing = $this->plans->findByClientPeriod((int)$project['client_id'], $periodYear, $periodMonth);
-        if ($existing) {
+        $canReuseExisting = $existing && (string)($existing['status'] ?? '') === 'planned';
+        if ($canReuseExisting) {
             $planId = (int)($existing['id'] ?? 0);
             if ($planId <= 0) {
                 sendError('CREATE_FAILED', 'Не удалось создать счет по проекту', 500);
