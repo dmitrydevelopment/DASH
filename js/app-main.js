@@ -3431,10 +3431,10 @@ function resetNotificationTriggersUI() {
         <div class="form-group">
           <input type="text" class="crmNotificationTriggerName" placeholder="Описание триггера" autocomplete="off">
         </div>
-        <div class="form-group">
+        <div class="form-group crm-notification-trigger-event">
           <input type="text" class="crmNotificationTriggerEvent" placeholder="Код события (пример: finance.unknown_payment.created)" autocomplete="off">
         </div>
-        <div class="form-group form-group--inline-checkboxes">
+        <div class="form-group form-group--inline-checkboxes crm-notification-trigger-checks">
           <label class="inline-checkbox">
             <input type="checkbox" class="crmNotificationTriggerTelegram" checked>
             <span>Телеграм</span>
@@ -3443,6 +3443,8 @@ function resetNotificationTriggersUI() {
             <input type="checkbox" class="crmNotificationTriggerEmail">
             <span>Email</span>
           </label>
+        </div>
+        <div class="form-group crm-notification-trigger-trash">
           <button class="action-btn action-btn--delete crmNotificationTriggerRemoveBtn" title="Удалить">🗑️</button>
         </div>
       </div>
@@ -3462,10 +3464,10 @@ function addNotificationTriggerRow(name, eventCode, sendTelegram, sendEmail) {
       <div class="form-group">
         <input type="text" class="crmNotificationTriggerName" placeholder="Описание триггера" autocomplete="off">
       </div>
-      <div class="form-group">
+      <div class="form-group crm-notification-trigger-event">
         <input type="text" class="crmNotificationTriggerEvent" placeholder="Код события (пример: finance.unknown_payment.created)" autocomplete="off">
       </div>
-      <div class="form-group form-group--inline-checkboxes">
+      <div class="form-group form-group--inline-checkboxes crm-notification-trigger-checks">
         <label class="inline-checkbox">
           <input type="checkbox" class="crmNotificationTriggerTelegram" checked>
           <span>Телеграм</span>
@@ -3474,6 +3476,8 @@ function addNotificationTriggerRow(name, eventCode, sendTelegram, sendEmail) {
           <input type="checkbox" class="crmNotificationTriggerEmail">
           <span>Email</span>
         </label>
+      </div>
+      <div class="form-group crm-notification-trigger-trash">
         <button class="action-btn action-btn--delete crmNotificationTriggerRemoveBtn" title="Удалить">🗑️</button>
       </div>
     </div>
