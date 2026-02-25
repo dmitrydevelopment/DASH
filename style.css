@@ -2621,6 +2621,20 @@ body {
   margin-bottom: var(--space-32);
 }
 
+.payment-stats.payment-stats--unknown {
+  grid-template-columns: 1fr 1fr;
+}
+
+.payment-stats.payment-stats--unknown #paymentAverageCard {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .payment-stats.payment-stats--unknown {
+    grid-template-columns: 1fr;
+  }
+}
+
 .payments-history-table {
   overflow-x: auto;
   margin-top: var(--space-24);

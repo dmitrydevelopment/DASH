@@ -372,7 +372,7 @@
                                 </div>
                                 <div class="period-selector" id="historyInnSearchWrap" style="display:none;">
                                     <label for="historyInnSearch">ИНН:</label>
-                                    <input type="text" id="historyInnSearch" class="period-select" placeholder="Поиск по ИНН">
+                                    <input type="text" id="historyInnSearch" class="period-select" placeholder="ИНН">
                                 </div>
                                 <div class="period-selector" style="display:flex; align-items:flex-end; gap:8px;">
                                     <button type="button" class="btn btn--primary" id="historyApplyBtn">Применить</button>
@@ -386,7 +386,7 @@
                             <button type="button" class="subcategory-btn" id="paymentsTabUnknownBtn">Неизвестные поступления</button>
                         </div>
 
-                        <div class="payment-stats">
+                        <div class="payment-stats" id="paymentStatsGrid">
                             <div class="stat-card">
                                 <div class="stat-icon">📊</div>
                                 <div class="stat-content">
@@ -401,7 +401,7 @@
                                     <div class="stat-value" id="paymentTotal">176,400 ₽</div>
                                 </div>
                             </div>
-                            <div class="stat-card">
+                            <div class="stat-card" id="paymentAverageCard">
                                 <div class="stat-icon">📈</div>
                                 <div class="stat-content">
                                     <h3>Средний чек</h3>

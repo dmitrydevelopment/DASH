@@ -6937,6 +6937,8 @@ function initPaymentsHistory() {
       financeSprint2State.paymentsTab = tab;
       if (paidBtn) paidBtn.classList.toggle('active', tab === 'paid');
       if (unknownBtn) unknownBtn.classList.toggle('active', tab === 'unknown');
+      const statsGrid = document.getElementById('paymentStatsGrid');
+      if (statsGrid) statsGrid.classList.toggle('payment-stats--unknown', tab === 'unknown');
       const paidTable = document.getElementById('paymentsHistoryTable');
       const unknownTable = document.getElementById('paymentsUnknownTable');
       if (paidTable) paidTable.style.display = tab === 'paid' ? 'block' : 'none';
