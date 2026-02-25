@@ -192,7 +192,6 @@ function saveOperation(mysqli $db, array $op)
         return '';
     }
 
-    $json = json_encode($op, JSON_UNESCAPED_UNICODE);
     $operationTime = isset($op['operationDate']) ? (string) $op['operationDate'] : '';
     if ($operationTime === '') {
         $operationTime = isset($op['operationTime']) ? (string)$op['operationTime'] : date('Y-m-d H:i:s');
@@ -209,6 +208,19 @@ function saveOperation(mysqli $db, array $op)
     if ($operationId === '') {
         return '';
     }
+    $json = json_encode([
+        'operation' => $op,
+        'normalized' => [
+            'operation_id' => $operationId,
+            'operation_time' => $operationTime,
+            'amount' => $amount,
+            'currency' => $currency,
+            'account_number' => $accountNumber,
+            'description' => $description,
+            'counterparty_name' => $counterpartyName,
+            'counterparty_inn' => $counterpartyInn,
+        ],
+    ], JSON_UNESCAPED_UNICODE);
 
     $createdAt = date('Y-m-d H:i:s');
     $fields = ['operation_id', 'amount', 'currency', 'raw_json'];

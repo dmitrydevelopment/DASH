@@ -1982,7 +1982,19 @@ endobj
         if ($operationId === '') {
             return '';
         }
-        $rawJson = json_encode($op, JSON_UNESCAPED_UNICODE);
+        $rawJson = json_encode([
+            'operation' => $op,
+            'normalized' => [
+                'operation_id' => $operationId,
+                'operation_time' => $opTime,
+                'amount' => $amount,
+                'currency' => $currency,
+                'account_number' => $accountNumber,
+                'description' => $description,
+                'counterparty_name' => $counterpartyName,
+                'counterparty_inn' => $counterpartyInn,
+            ],
+        ], JSON_UNESCAPED_UNICODE);
 
         $fields = ['operation_id'];
         $values = [$operationId];

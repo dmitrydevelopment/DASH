@@ -7171,18 +7171,29 @@ function openUnknownPaymentDetails(operationId) {
   const rawEl = document.getElementById('unknownPaymentDetailsRaw');
   if (!modal || !rawEl) return;
 
-  let raw = String(op?.raw_json || '').trim();
-  if (!raw) {
-    rawEl.textContent = 'Сырые данные банка отсутствуют';
-    modal.classList.add('active');
-    return;
+  const raw = String(op?.raw_json || '').trim();
+  let rawPayload = null;
+  let rawText = raw;
+  try {
+    rawPayload = raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    rawPayload = null;
   }
 
+  const details = {
+    operation_id: String(op?.operation_id || ''),
+    operation_time: String(op?.operation_time || ''),
+    amount: Number(op?.amount || 0),
+    currency: String(op?.currency || ''),
+    description: String(op?.description || ''),
+    counterparty_name: String(op?.counterparty_name || ''),
+    counterparty_inn: String(op?.counterparty_inn || ''),
+    raw_payload: rawPayload !== null ? rawPayload : (rawText || 'Сырые данные банка отсутствуют')
+  };
   try {
-    const parsed = JSON.parse(raw);
-    rawEl.textContent = JSON.stringify(parsed, null, 2);
+    rawEl.textContent = JSON.stringify(details, null, 2);
   } catch (e) {
-    rawEl.textContent = raw;
+    rawEl.textContent = String(rawText || 'Сырые данные банка отсутствуют');
   }
   modal.classList.add('active');
 }
