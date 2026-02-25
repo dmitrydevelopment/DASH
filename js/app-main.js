@@ -3436,7 +3436,7 @@ function resetNotificationTriggersUI() {
         </div>
         <div class="form-group form-group--inline-checkboxes crm-notification-trigger-check crm-notification-trigger-check--tg">
           <label class="inline-checkbox">
-            <input type="checkbox" class="crmNotificationTriggerTelegram" checked>
+            <input type="checkbox" class="crmNotificationTriggerTelegram">
             <span>Телеграм</span>
           </label>
         </div>
@@ -3471,7 +3471,7 @@ function addNotificationTriggerRow(name, eventCode, sendTelegram, sendEmail) {
       </div>
       <div class="form-group form-group--inline-checkboxes crm-notification-trigger-check crm-notification-trigger-check--tg">
         <label class="inline-checkbox">
-          <input type="checkbox" class="crmNotificationTriggerTelegram" checked>
+          <input type="checkbox" class="crmNotificationTriggerTelegram">
           <span>Телеграм</span>
         </label>
       </div>
@@ -3538,6 +3538,16 @@ function collectNotificationTriggers() {
         sort_order: idx * 2 + 1
       });
     }
+    if (!sendTelegram && !sendEmail) {
+      out.push({
+        trigger_name: triggerName,
+        event_code: eventCode,
+        channel: 'telegram',
+        recipient: '',
+        is_active: 0,
+        sort_order: idx * 2
+      });
+    }
   });
   return out;
 }
@@ -3557,7 +3567,7 @@ function fillNotificationTriggersFromApi(items) {
     const emailEl = fixed.querySelector('.crmNotificationTriggerEmail');
     if (nameEl) nameEl.value = 'Появление новой неопознанной оплаты';
     if (eventEl) eventEl.value = 'finance.unknown_payment.created';
-    if (tgEl) tgEl.checked = true;
+    if (tgEl) tgEl.checked = false;
     if (emailEl) emailEl.checked = false;
     return;
   }
@@ -3619,7 +3629,7 @@ function initNotificationTriggersUIOnce() {
   crmNotificationTriggersInitialized = true;
 
   addBtn.addEventListener('click', () => {
-    addNotificationTriggerRow('', '', true, false);
+    addNotificationTriggerRow('', '', false, false);
   });
 
   list.addEventListener('click', (e) => {
@@ -3637,7 +3647,7 @@ function initNotificationTriggersUIOnce() {
       const emailEl = row.querySelector('.crmNotificationTriggerEmail');
       if (nameEl) nameEl.value = '';
       if (eventEl) eventEl.value = '';
-      if (tgEl) tgEl.checked = true;
+      if (tgEl) tgEl.checked = false;
       if (emailEl) emailEl.checked = false;
       return;
     }
