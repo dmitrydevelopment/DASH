@@ -389,10 +389,15 @@ function normalizeInvoicePlanRow(item) {
 
 async function loadStatusBoard() {
   try {
-    const resp = await fetch('/api.php/finance/status-board', {
+    const bust = Date.now();
+    const resp = await fetch(`/api.php/finance/status-board?_=${bust}`, {
       credentials: 'same-origin',
       cache: 'no-store',
-      headers: { 'Accept': 'application/json' }
+      headers: {
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
     });
 
     if (!resp.ok) {
@@ -713,6 +718,8 @@ function bindInvoicePlanModalActions() {
           const msg = result?.error?.message || 'Не удалось выставить счет по проекту';
           throw new Error(msg);
         }
+        const result = await resp.json().catch(() => null);
+        createdPlanId = Number(result?.plan?.plan_id || 0);
         showToast('Счет по проекту выставлен', 'success');
       } else if (mode === 'create') {
         const clientId = Number(invoicePlanState.selectedClientId || 0);
@@ -768,6 +775,13 @@ function bindInvoicePlanModalActions() {
       if (mode === 'create' && payload.send_now && createdPlanId > 0) {
         const hasCreatedCard = invoicePlanState.items.some((item) => Number(item.id) === createdPlanId);
         if (!hasCreatedCard) {
+          await new Promise((resolve) => setTimeout(resolve, 700));
+          await loadStatusBoard();
+        }
+      }
+      if (mode === 'project_invoice' && createdPlanId > 0) {
+        const hasMovedCard = invoicePlanState.items.some((item) => Number(item.id) === createdPlanId);
+        if (!hasMovedCard) {
           await new Promise((resolve) => setTimeout(resolve, 700));
           await loadStatusBoard();
         }
