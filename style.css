@@ -4570,7 +4570,7 @@ body {
 
 .crm-notification-trigger-row {
   grid-template-columns: minmax(0, 50fr) minmax(0, 25fr) minmax(0, 8fr) minmax(0, 8fr) minmax(0, 9fr);
-  gap: var(--space-8);
+  gap: var(--space-16);
   align-items: end;
 }
 
