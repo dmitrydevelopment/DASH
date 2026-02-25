@@ -39,6 +39,7 @@ class SettingsModel
             $this->setError('ensureRow failed: ' . $this->db->error);
         }
         $this->ensureFinanceColumns();
+        $this->ensureNotificationTriggersTable();
     }
 
     private function ensureFinanceColumns(): void
@@ -53,8 +54,55 @@ class SettingsModel
                     $this->columnsCache = null;
                 }
             }
+
+            $res = $this->db->query("SHOW COLUMNS FROM crm_settings LIKE 'finance_email_subject_reminder'");
+            if ($res) {
+                $exists = $res->num_rows > 0;
+                $res->close();
+                if (!$exists) {
+                    $this->db->query("ALTER TABLE crm_settings ADD COLUMN finance_email_subject_reminder VARCHAR(255) NULL AFTER finance_email_subject_act");
+                    $this->columnsCache = null;
+                }
+            }
+
+            $res = $this->db->query("SHOW COLUMNS FROM crm_settings LIKE 'finance_email_body_reminder_html'");
+            if ($res) {
+                $exists = $res->num_rows > 0;
+                $res->close();
+                if (!$exists) {
+                    $this->db->query("ALTER TABLE crm_settings ADD COLUMN finance_email_body_reminder_html MEDIUMTEXT NULL AFTER finance_email_body_act_html");
+                    $this->columnsCache = null;
+                }
+            }
         } catch (Throwable $e) {
             $this->setError('ensureFinanceColumns failed: ' . $e->getMessage());
+        }
+    }
+
+    private function ensureNotificationTriggersTable(): void
+    {
+        try {
+            $sql = "CREATE TABLE IF NOT EXISTS notification_triggers (
+                        id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+                        event_code VARCHAR(128) COLLATE utf8mb4_unicode_ci NOT NULL,
+                        trigger_name VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+                        channel ENUM('email','telegram','webhook') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'telegram',
+                        recipient VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+                        is_active TINYINT(1) NOT NULL DEFAULT 1,
+                        sort_order INT(10) UNSIGNED NOT NULL DEFAULT 0,
+                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        PRIMARY KEY (id),
+                        UNIQUE KEY uniq_trigger_event_channel_recipient (event_code, channel, recipient),
+                        KEY idx_trigger_sort (sort_order, id)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+            $this->db->query($sql);
+
+            $seed = "INSERT IGNORE INTO notification_triggers (event_code, trigger_name, channel, recipient, is_active, sort_order)
+                     VALUES ('finance.unknown_payment.created', 'Появление новой неопознанной оплаты', 'telegram', '', 1, 0)";
+            $this->db->query($seed);
+        } catch (Throwable $e) {
+            $this->setError('ensureNotificationTriggersTable failed: ' . $e->getMessage());
         }
     }
 
@@ -144,8 +192,10 @@ class SettingsModel
             'finance_email_from_name' => (string) $this->col($row, $cols, 'finance_email_from_name', ''),
             'finance_email_subject_invoice' => (string) $this->col($row, $cols, 'finance_email_subject_invoice', ''),
             'finance_email_subject_act' => (string) $this->col($row, $cols, 'finance_email_subject_act', ''),
+            'finance_email_subject_reminder' => (string) $this->col($row, $cols, 'finance_email_subject_reminder', ''),
             'finance_email_body_invoice_html' => (string) $this->col($row, $cols, 'finance_email_body_invoice_html', ''),
             'finance_email_body_act_html' => (string) $this->col($row, $cols, 'finance_email_body_act_html', ''),
+            'finance_email_body_reminder_html' => (string) $this->col($row, $cols, 'finance_email_body_reminder_html', ''),
             'finance_email_bcc' => (string) $this->col($row, $cols, 'finance_email_bcc', ''),
 
             'finance_telegram_bot_token' => (string) $this->col($row, $cols, 'finance_telegram_bot_token', ''),
@@ -195,8 +245,10 @@ class SettingsModel
             'finance_email_from_name' => ['col' => 'finance_email_from_name', 'type' => 's'],
             'finance_email_subject_invoice' => ['col' => 'finance_email_subject_invoice', 'type' => 's'],
             'finance_email_subject_act' => ['col' => 'finance_email_subject_act', 'type' => 's'],
+            'finance_email_subject_reminder' => ['col' => 'finance_email_subject_reminder', 'type' => 's'],
             'finance_email_body_invoice_html' => ['col' => 'finance_email_body_invoice_html', 'type' => 's'],
             'finance_email_body_act_html' => ['col' => 'finance_email_body_act_html', 'type' => 's'],
+            'finance_email_body_reminder_html' => ['col' => 'finance_email_body_reminder_html', 'type' => 's'],
             'finance_email_bcc' => ['col' => 'finance_email_bcc', 'type' => 's'],
 
             'finance_telegram_bot_token' => ['col' => 'finance_telegram_bot_token', 'type' => 's'],
@@ -567,6 +619,83 @@ class SettingsModel
                     $active = isset($s['is_active']) ? (int)$s['is_active'] : 1;
 
                     $stmt->bind_param('ssii', $code, $name, $sort, $active);
+                    if (!$stmt->execute()) {
+                        $stmt->close();
+                        throw new Exception('execute failed');
+                    }
+                }
+
+                $stmt->close();
+            }
+
+            $this->db->commit();
+            return true;
+        } catch (Exception $e) {
+            $this->db->rollback();
+            return false;
+        }
+    }
+
+    public function getNotificationTriggers(): array
+    {
+        $this->ensureNotificationTriggersTable();
+
+        $res = $this->db->query(
+            "SELECT id, event_code, trigger_name, channel, recipient, is_active, sort_order
+             FROM notification_triggers
+             ORDER BY sort_order ASC, id ASC"
+        );
+
+        if ($res === false) {
+            return [];
+        }
+
+        $out = [];
+        while ($row = $res->fetch_assoc()) {
+            $out[] = [
+                'id' => (int)$row['id'],
+                'event_code' => (string)$row['event_code'],
+                'trigger_name' => (string)$row['trigger_name'],
+                'channel' => (string)$row['channel'],
+                'recipient' => (string)$row['recipient'],
+                'is_active' => (int)$row['is_active'],
+                'sort_order' => (int)$row['sort_order'],
+            ];
+        }
+        $res->close();
+
+        return $out;
+    }
+
+    public function replaceNotificationTriggers(array $triggers): bool
+    {
+        $this->ensureNotificationTriggersTable();
+        $this->db->begin_transaction();
+
+        try {
+            $ok = $this->db->query("DELETE FROM notification_triggers");
+            if (!$ok) {
+                throw new Exception('delete failed');
+            }
+
+            if (!empty($triggers)) {
+                $stmt = $this->db->prepare(
+                    "INSERT INTO notification_triggers (event_code, trigger_name, channel, recipient, is_active, sort_order)
+                     VALUES (?, ?, ?, ?, ?, ?)"
+                );
+                if (!$stmt) {
+                    throw new Exception('prepare failed');
+                }
+
+                foreach ($triggers as $t) {
+                    $eventCode = isset($t['event_code']) ? trim((string)$t['event_code']) : '';
+                    $triggerName = isset($t['trigger_name']) ? trim((string)$t['trigger_name']) : '';
+                    $channel = isset($t['channel']) ? trim((string)$t['channel']) : 'telegram';
+                    $recipient = isset($t['recipient']) ? trim((string)$t['recipient']) : '';
+                    $isActive = isset($t['is_active']) ? (int)$t['is_active'] : 1;
+                    $sortOrder = isset($t['sort_order']) ? (int)$t['sort_order'] : 0;
+
+                    $stmt->bind_param('ssssii', $eventCode, $triggerName, $channel, $recipient, $isActive, $sortOrder);
                     if (!$stmt->execute()) {
                         $stmt->close();
                         throw new Exception('execute failed');

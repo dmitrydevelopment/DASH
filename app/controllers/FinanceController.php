@@ -16,6 +16,7 @@ class FinanceController
     private $settingsColumns = null;
     private $invoicePlanColumns = null;
     private $bankOperationColumns = null;
+    private $lastBankOperationWasInsert = false;
 
     public function __construct(mysqli $db)
     {
@@ -817,8 +818,16 @@ class FinanceController
             $operationId = $this->upsertBankOperation($op);
             if ($operationId === '') continue;
             $saved++;
-            if ($this->autoMatchBankOperation($operationId)) {
+            $isMatched = $this->autoMatchBankOperation($operationId);
+            if ($isMatched) {
                 $matched++;
+            } elseif ($this->lastBankOperationWasInsert) {
+                $this->dispatchNotificationTriggerEvent('finance.unknown_payment.created', [
+                    'operation_id' => $operationId,
+                    'amount' => (float)($op['amount'] ?? 0),
+                    'raw_operation' => $op,
+                    'created_at' => date('Y-m-d H:i:s'),
+                ]);
             }
         }
 
@@ -1953,6 +1962,7 @@ endobj
 
     private function upsertBankOperation(array $op)
     {
+        $this->lastBankOperationWasInsert = false;
         $type = strtolower(trim((string)($op['operationType'] ?? $op['direction'] ?? $op['type'] ?? '')));
         $isIncome = true;
         if ($type !== '') {
@@ -1981,6 +1991,14 @@ endobj
         $operationId = $this->resolveBankOperationId($op, $opTime, $amount, $currency, $accountNumber, $description, $counterpartyName, $counterpartyInn);
         if ($operationId === '') {
             return '';
+        }
+        $existsStmt = $this->db->prepare("SELECT id FROM finance_bank_operations WHERE operation_id = ? LIMIT 1");
+        if ($existsStmt) {
+            $existsStmt->bind_param('s', $operationId);
+            $existsStmt->execute();
+            $existsRes = $existsStmt->get_result();
+            $this->lastBankOperationWasInsert = !($existsRes && $existsRes->fetch_assoc());
+            $existsStmt->close();
         }
         $rawJson = json_encode([
             'operation' => $op,
@@ -2039,6 +2057,105 @@ endobj
         $stmt->execute();
         $stmt->close();
         return $operationId;
+    }
+
+    private function dispatchNotificationTriggerEvent($eventCode, array $payload = [])
+    {
+        $eventCode = trim((string)$eventCode);
+        if ($eventCode === '') {
+            return;
+        }
+        $this->ensureNotificationTriggersTable();
+
+        $stmt = $this->db->prepare(
+            "SELECT id, channel, recipient
+             FROM notification_triggers
+             WHERE event_code = ? AND is_active = 1
+             ORDER BY sort_order ASC, id ASC"
+        );
+        if (!$stmt) {
+            return;
+        }
+        $stmt->bind_param('s', $eventCode);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $triggers = [];
+        while ($res && ($row = $res->fetch_assoc())) {
+            $triggers[] = $row;
+        }
+        $stmt->close();
+
+        if (empty($triggers)) {
+            return;
+        }
+
+        $this->ensureNotificationTriggerEventsTable();
+        $payloadJson = json_encode($payload, JSON_UNESCAPED_UNICODE);
+        foreach ($triggers as $trigger) {
+            $triggerId = (int)($trigger['id'] ?? 0);
+            if ($triggerId <= 0) {
+                continue;
+            }
+            $channel = trim((string)($trigger['channel'] ?? 'telegram'));
+            $recipient = trim((string)($trigger['recipient'] ?? ''));
+            $status = 'queued';
+            $insert = $this->db->prepare(
+                "INSERT INTO notification_trigger_events
+                 (trigger_id, event_code, channel, recipient, payload_json, status, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, NOW())"
+            );
+            if (!$insert) {
+                continue;
+            }
+            $insert->bind_param('isssss', $triggerId, $eventCode, $channel, $recipient, $payloadJson, $status);
+            $insert->execute();
+            $insert->close();
+        }
+    }
+
+    private function ensureNotificationTriggerEventsTable()
+    {
+        $this->db->query(
+            "CREATE TABLE IF NOT EXISTS notification_trigger_events (
+                id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+                trigger_id INT(10) UNSIGNED NOT NULL,
+                event_code VARCHAR(128) COLLATE utf8mb4_unicode_ci NOT NULL,
+                channel ENUM('email','telegram','webhook') COLLATE utf8mb4_unicode_ci NOT NULL,
+                recipient VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+                payload_json LONGTEXT COLLATE utf8mb4_unicode_ci,
+                status ENUM('queued','sent','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                processed_at DATETIME DEFAULT NULL,
+                PRIMARY KEY (id),
+                KEY idx_trigger_id (trigger_id),
+                KEY idx_event_code (event_code),
+                KEY idx_status_created (status, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    }
+
+    private function ensureNotificationTriggersTable()
+    {
+        $this->db->query(
+            "CREATE TABLE IF NOT EXISTS notification_triggers (
+                id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+                event_code VARCHAR(128) COLLATE utf8mb4_unicode_ci NOT NULL,
+                trigger_name VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+                channel ENUM('email','telegram','webhook') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'telegram',
+                recipient VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+                is_active TINYINT(1) NOT NULL DEFAULT 1,
+                sort_order INT(10) UNSIGNED NOT NULL DEFAULT 0,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                UNIQUE KEY uniq_trigger_event_channel_recipient (event_code, channel, recipient),
+                KEY idx_trigger_sort (sort_order, id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+        $this->db->query(
+            "INSERT IGNORE INTO notification_triggers (event_code, trigger_name, channel, recipient, is_active, sort_order)
+             VALUES ('finance.unknown_payment.created', 'Появление новой неопознанной оплаты', 'telegram', '', 1, 0)"
+        );
     }
 
     private function normalizeDateTimeValue($raw)

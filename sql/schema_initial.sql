@@ -165,8 +165,10 @@ CREATE TABLE `crm_settings` (
   `finance_email_from_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finance_email_subject_invoice` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finance_email_subject_act` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `finance_email_subject_reminder` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finance_email_body_invoice_html` mediumtext COLLATE utf8mb4_unicode_ci,
   `finance_email_body_act_html` mediumtext COLLATE utf8mb4_unicode_ci,
+  `finance_email_body_reminder_html` mediumtext COLLATE utf8mb4_unicode_ci,
   `finance_email_bcc` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `finance_telegram_bot_token` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `telegram_default_message_invoice` mediumtext COLLATE utf8mb4_unicode_ci,
@@ -176,6 +178,51 @@ CREATE TABLE `crm_settings` (
   `finance_diadoc_from_box_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Структура таблицы `notification_triggers`
+--
+
+DROP TABLE IF EXISTS `notification_triggers`;
+CREATE TABLE `notification_triggers` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `event_code` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `trigger_name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `channel` enum('email','telegram','webhook') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'telegram',
+  `recipient` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `is_active` tinyint(1) NOT NULL DEFAULT '1',
+  `sort_order` int(10) UNSIGNED NOT NULL DEFAULT '0',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Дамп данных таблицы `notification_triggers`
+--
+
+INSERT INTO `notification_triggers` (`id`, `event_code`, `trigger_name`, `channel`, `recipient`, `is_active`, `sort_order`, `created_at`, `updated_at`) VALUES
+(1, 'finance.unknown_payment.created', 'Появление новой неопознанной оплаты', 'telegram', '', 1, 0, NOW(), NOW());
+
+-- --------------------------------------------------------
+
+--
+-- Структура таблицы `notification_trigger_events`
+--
+
+DROP TABLE IF EXISTS `notification_trigger_events`;
+CREATE TABLE `notification_trigger_events` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `trigger_id` int(10) UNSIGNED NOT NULL,
+  `event_code` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `channel` enum('email','telegram','webhook') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `recipient` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `payload_json` longtext COLLATE utf8mb4_unicode_ci,
+  `status` enum('queued','sent','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `processed_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -467,6 +514,23 @@ ALTER TABLE `crm_settings`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Индексы таблицы `notification_triggers`
+--
+ALTER TABLE `notification_triggers`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_trigger_event_channel_recipient` (`event_code`,`channel`,`recipient`),
+  ADD KEY `idx_trigger_sort` (`sort_order`,`id`);
+
+--
+-- Индексы таблицы `notification_trigger_events`
+--
+ALTER TABLE `notification_trigger_events`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_trigger_id` (`trigger_id`),
+  ADD KEY `idx_event_code` (`event_code`),
+  ADD KEY `idx_status_created` (`status`,`created_at`);
+
+--
 -- Индексы таблицы `employees`
 --
 ALTER TABLE `employees`
@@ -623,6 +687,18 @@ ALTER TABLE `work_categories`
   MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT для таблицы `notification_triggers`
+--
+ALTER TABLE `notification_triggers`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT для таблицы `notification_trigger_events`
+--
+ALTER TABLE `notification_trigger_events`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT для таблицы `invoice_plans`
 --
 ALTER TABLE `invoice_plans`
@@ -667,6 +743,12 @@ ALTER TABLE `employee_salary_history`
 --
 ALTER TABLE `employee_schedule`
   ADD CONSTRAINT `fk_employee_schedule_employee` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Ограничения внешнего ключа таблицы `notification_trigger_events`
+--
+ALTER TABLE `notification_trigger_events`
+  ADD CONSTRAINT `fk_notification_trigger_events_trigger` FOREIGN KEY (`trigger_id`) REFERENCES `notification_triggers` (`id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

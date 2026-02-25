@@ -28,6 +28,7 @@ class SettingsController
         $roles = $this->settings->getRoles();
         $workCategories = $this->settings->getWorkCategories();
         $projectStatuses = $this->settings->getProjectStatuses();
+        $notificationTriggers = $this->settings->getNotificationTriggers();
 
         sendJson([
             'success' => true,
@@ -35,7 +36,8 @@ class SettingsController
                 'settings' => $settings,
                 'roles' => $roles,
                 'work_categories' => $workCategories,
-                'project_statuses' => $projectStatuses
+                'project_statuses' => $projectStatuses,
+                'notification_triggers' => $notificationTriggers
             ]
         ]);
     }
@@ -48,6 +50,7 @@ class SettingsController
         $rolesPayload = (isset($payload['roles']) && is_array($payload['roles'])) ? $payload['roles'] : [];
         $workCategoriesPayload = (isset($payload['work_categories']) && is_array($payload['work_categories'])) ? $payload['work_categories'] : [];
         $projectStatusesPayload = (isset($payload['project_statuses']) && is_array($payload['project_statuses'])) ? $payload['project_statuses'] : [];
+        $notificationTriggersPayload = (isset($payload['notification_triggers']) && is_array($payload['notification_triggers'])) ? $payload['notification_triggers'] : [];
 
         $roles = [];
         $sort = 0;
@@ -133,6 +136,39 @@ class SettingsController
             $projectStatusSort++;
         }
 
+        $notificationTriggers = [];
+        $notificationTriggerSort = 0;
+        foreach ($notificationTriggersPayload as $t) {
+            $eventCode = isset($t['event_code']) ? trim((string)$t['event_code']) : '';
+            $triggerName = isset($t['trigger_name']) ? trim((string)$t['trigger_name']) : '';
+            $channel = isset($t['channel']) ? trim((string)$t['channel']) : 'telegram';
+            $recipient = isset($t['recipient']) ? trim((string)$t['recipient']) : '';
+            $isActive = isset($t['is_active']) ? (int)$t['is_active'] : 1;
+
+            if ($eventCode === '' && $triggerName === '' && $recipient === '') {
+                continue;
+            }
+            if ($eventCode === '' || $triggerName === '') {
+                sendError('VALIDATION_ERROR', 'Для триггера обязательны код события и название.');
+            }
+            if (!preg_match('/^[a-z0-9._-]+$/', $eventCode)) {
+                sendError('VALIDATION_ERROR', 'Код события триггера: только латиница, цифры, ".", "_" и "-".');
+            }
+            if ($channel !== 'email' && $channel !== 'telegram' && $channel !== 'webhook') {
+                sendError('VALIDATION_ERROR', 'Канал триггера должен быть email, telegram или webhook.');
+            }
+
+            $notificationTriggers[] = [
+                'event_code' => $eventCode,
+                'trigger_name' => $triggerName,
+                'channel' => $channel,
+                'recipient' => $recipient,
+                'is_active' => ($isActive === 1 ? 1 : 0),
+                'sort_order' => $notificationTriggerSort,
+            ];
+            $notificationTriggerSort++;
+        }
+
         $hour = isset($payload['scheduler_start_hour']) ? (int) $payload['scheduler_start_hour'] : 9;
         if ($hour < 0 || $hour > 23) {
             sendError('VALIDATION_ERROR', 'Время начала отправки должно быть в диапазоне 0-23.');
@@ -181,8 +217,10 @@ class SettingsController
             'finance_email_from_name' => (string) ($payload['finance_email_from_name'] ?? ''),
             'finance_email_subject_invoice' => (string) ($payload['finance_email_subject_invoice'] ?? ''),
             'finance_email_subject_act' => (string) ($payload['finance_email_subject_act'] ?? ''),
+            'finance_email_subject_reminder' => (string) ($payload['finance_email_subject_reminder'] ?? ''),
             'finance_email_body_invoice_html' => (string) ($payload['finance_email_body_invoice_html'] ?? ''),
             'finance_email_body_act_html' => (string) ($payload['finance_email_body_act_html'] ?? ''),
+            'finance_email_body_reminder_html' => (string) ($payload['finance_email_body_reminder_html'] ?? ''),
             'finance_email_bcc' => (string) ($payload['finance_email_bcc'] ?? ''),
 
             'finance_telegram_bot_token' => (string) ($payload['finance_telegram_bot_token'] ?? ''),
@@ -213,6 +251,10 @@ class SettingsController
         if (!$okProjectStatuses) {
             sendError('SERVER_ERROR', 'Не удалось сохранить статусы проектов', 500);
         }
+        $okNotificationTriggers = $this->settings->replaceNotificationTriggers($notificationTriggers);
+        if (!$okNotificationTriggers) {
+            sendError('SERVER_ERROR', 'Не удалось сохранить триггеры уведомлений', 500);
+        }
 
         $settings = $this->settings->get();
         $err = $this->settings->getLastError();
@@ -226,7 +268,8 @@ class SettingsController
                 'settings' => $settings,
                 'roles' => $this->settings->getRoles(),
                 'work_categories' => $this->settings->getWorkCategories(),
-                'project_statuses' => $this->settings->getProjectStatuses()
+                'project_statuses' => $this->settings->getProjectStatuses(),
+                'notification_triggers' => $this->settings->getNotificationTriggers()
             ]
         ]);
     }

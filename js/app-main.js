@@ -3022,6 +3022,7 @@ function initSettingsTab() {
   initCrmRolesUIOnce();
   initWorkCategoriesUIOnce();
   initProjectStatusesUIOnce();
+  initNotificationTriggersUIOnce();
 
   loadCrmSettings();
 }
@@ -3165,6 +3166,7 @@ function initCrmRolesUIOnce() {
 
 let crmWorkCategoriesInitialized = false;
 let crmProjectStatusesInitialized = false;
+let crmNotificationTriggersInitialized = false;
 
 function resetWorkCategoriesUI() {
   const list = document.getElementById('crmWorkCategoriesList');
@@ -3419,6 +3421,212 @@ function initProjectStatusesUIOnce() {
   });
 }
 
+function resetNotificationTriggersUI() {
+  const list = document.getElementById('crmNotificationTriggersList');
+  if (!list) return;
+
+  list.innerHTML = `
+    <div class="crm-notification-trigger-item" data-notification-trigger-row="1" data-fixed="1">
+      <div class="form-row">
+        <div class="form-group">
+          <input type="text" class="crmNotificationTriggerName" placeholder="Название триггера" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <input type="text" class="crmNotificationTriggerEvent" placeholder="Код события (пример: finance.unknown_payment.created)" autocomplete="off">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <select class="crmNotificationTriggerChannel">
+            <option value="telegram">telegram</option>
+            <option value="email">email</option>
+            <option value="webhook">webhook</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <input type="text" class="crmNotificationTriggerRecipient" placeholder="Получатель (email/chat id/url)">
+        </div>
+        <div class="form-group form-group--inline-checkboxes">
+          <label class="inline-checkbox">
+            <input type="checkbox" class="crmNotificationTriggerActive" checked>
+            <span>Активен</span>
+          </label>
+          <button class="action-btn action-btn--delete crmNotificationTriggerRemoveBtn" title="Удалить">🗑️</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function addNotificationTriggerRow(name, eventCode, channel, recipient, isActive) {
+  const list = document.getElementById('crmNotificationTriggersList');
+  if (!list) return;
+
+  const item = document.createElement('div');
+  item.className = 'crm-notification-trigger-item';
+  item.setAttribute('data-notification-trigger-row', '1');
+  item.innerHTML = `
+    <div class="form-row">
+      <div class="form-group">
+        <input type="text" class="crmNotificationTriggerName" placeholder="Название триггера" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <input type="text" class="crmNotificationTriggerEvent" placeholder="Код события (пример: finance.unknown_payment.created)" autocomplete="off">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <select class="crmNotificationTriggerChannel">
+          <option value="telegram">telegram</option>
+          <option value="email">email</option>
+          <option value="webhook">webhook</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <input type="text" class="crmNotificationTriggerRecipient" placeholder="Получатель (email/chat id/url)">
+      </div>
+      <div class="form-group form-group--inline-checkboxes">
+        <label class="inline-checkbox">
+          <input type="checkbox" class="crmNotificationTriggerActive" checked>
+          <span>Активен</span>
+        </label>
+        <button class="action-btn action-btn--delete crmNotificationTriggerRemoveBtn" title="Удалить">🗑️</button>
+      </div>
+    </div>
+  `;
+
+  const nameEl = item.querySelector('.crmNotificationTriggerName');
+  const eventEl = item.querySelector('.crmNotificationTriggerEvent');
+  const channelEl = item.querySelector('.crmNotificationTriggerChannel');
+  const recipientEl = item.querySelector('.crmNotificationTriggerRecipient');
+  const activeEl = item.querySelector('.crmNotificationTriggerActive');
+  if (nameEl) nameEl.value = name || '';
+  if (eventEl) eventEl.value = eventCode || '';
+  if (channelEl) channelEl.value = channel || 'telegram';
+  if (recipientEl) recipientEl.value = recipient || '';
+  if (activeEl) activeEl.checked = (isActive === 1 || isActive === true);
+
+  list.appendChild(item);
+}
+
+function collectNotificationTriggers() {
+  const list = document.getElementById('crmNotificationTriggersList');
+  if (!list) return [];
+
+  const rows = Array.from(list.querySelectorAll('[data-notification-trigger-row="1"]'));
+  const out = [];
+  rows.forEach((row, idx) => {
+    const nameEl = row.querySelector('.crmNotificationTriggerName');
+    const eventEl = row.querySelector('.crmNotificationTriggerEvent');
+    const channelEl = row.querySelector('.crmNotificationTriggerChannel');
+    const recipientEl = row.querySelector('.crmNotificationTriggerRecipient');
+    const activeEl = row.querySelector('.crmNotificationTriggerActive');
+
+    const triggerName = nameEl ? String(nameEl.value || '').trim() : '';
+    const eventCode = eventEl ? String(eventEl.value || '').trim() : '';
+    const channel = channelEl ? String(channelEl.value || '').trim() : 'telegram';
+    const recipient = recipientEl ? String(recipientEl.value || '').trim() : '';
+    const isActive = activeEl && activeEl.checked ? 1 : 0;
+
+    if (triggerName === '' && eventCode === '' && recipient === '') return;
+
+    out.push({
+      trigger_name: triggerName,
+      event_code: eventCode,
+      channel,
+      recipient,
+      is_active: isActive,
+      sort_order: idx
+    });
+  });
+  return out;
+}
+
+function fillNotificationTriggersFromApi(items) {
+  resetNotificationTriggersUI();
+  const list = document.getElementById('crmNotificationTriggersList');
+  if (!list) return;
+
+  const arr = Array.isArray(items) ? items : [];
+  if (arr.length === 0) {
+    const fixed = list.querySelector('[data-fixed="1"]');
+    if (!fixed) return;
+    const nameEl = fixed.querySelector('.crmNotificationTriggerName');
+    const eventEl = fixed.querySelector('.crmNotificationTriggerEvent');
+    const channelEl = fixed.querySelector('.crmNotificationTriggerChannel');
+    const recipientEl = fixed.querySelector('.crmNotificationTriggerRecipient');
+    const activeEl = fixed.querySelector('.crmNotificationTriggerActive');
+    if (nameEl) nameEl.value = 'Появление новой неопознанной оплаты';
+    if (eventEl) eventEl.value = 'finance.unknown_payment.created';
+    if (channelEl) channelEl.value = 'telegram';
+    if (recipientEl) recipientEl.value = '';
+    if (activeEl) activeEl.checked = true;
+    return;
+  }
+
+  const first = arr[0] || {};
+  const fixed = list.querySelector('[data-fixed="1"]');
+  if (fixed) {
+    const nameEl = fixed.querySelector('.crmNotificationTriggerName');
+    const eventEl = fixed.querySelector('.crmNotificationTriggerEvent');
+    const channelEl = fixed.querySelector('.crmNotificationTriggerChannel');
+    const recipientEl = fixed.querySelector('.crmNotificationTriggerRecipient');
+    const activeEl = fixed.querySelector('.crmNotificationTriggerActive');
+    if (nameEl) nameEl.value = first.trigger_name || '';
+    if (eventEl) eventEl.value = first.event_code || '';
+    if (channelEl) channelEl.value = first.channel || 'telegram';
+    if (recipientEl) recipientEl.value = first.recipient || '';
+    if (activeEl) activeEl.checked = (first.is_active === 1 || first.is_active === true);
+  }
+
+  for (let i = 1; i < arr.length; i++) {
+    const row = arr[i] || {};
+    addNotificationTriggerRow(
+      row.trigger_name || '',
+      row.event_code || '',
+      row.channel || 'telegram',
+      row.recipient || '',
+      row.is_active
+    );
+  }
+}
+
+function initNotificationTriggersUIOnce() {
+  const list = document.getElementById('crmNotificationTriggersList');
+  const addBtn = document.getElementById('crmAddNotificationTriggerBtn');
+  if (!list || !addBtn) return;
+  if (crmNotificationTriggersInitialized) return;
+  crmNotificationTriggersInitialized = true;
+
+  addBtn.addEventListener('click', () => {
+    addNotificationTriggerRow('', '', 'telegram', '', 1);
+  });
+
+  list.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest('.crmNotificationTriggerRemoveBtn') : null;
+    if (!btn) return;
+    const row = btn.closest('[data-notification-trigger-row="1"]');
+    if (!row) return;
+
+    const rows = Array.from(list.querySelectorAll('[data-notification-trigger-row="1"]'));
+    const isFixed = row.getAttribute('data-fixed') === '1';
+    if (isFixed && rows.length === 1) {
+      const nameEl = row.querySelector('.crmNotificationTriggerName');
+      const eventEl = row.querySelector('.crmNotificationTriggerEvent');
+      const channelEl = row.querySelector('.crmNotificationTriggerChannel');
+      const recipientEl = row.querySelector('.crmNotificationTriggerRecipient');
+      const activeEl = row.querySelector('.crmNotificationTriggerActive');
+      if (nameEl) nameEl.value = '';
+      if (eventEl) eventEl.value = '';
+      if (channelEl) channelEl.value = 'telegram';
+      if (recipientEl) recipientEl.value = '';
+      if (activeEl) activeEl.checked = true;
+      return;
+    }
+    row.remove();
+  });
+}
+
 async function loadCrmSettings() {
   try {
     const resp = await fetch('/api.php/settings', {
@@ -3436,6 +3644,7 @@ async function loadCrmSettings() {
     const roles = result.data.roles || [];
     const workCategories = result.data.work_categories || [];
     const projectStatuses = result.data.project_statuses || [];
+    const notificationTriggers = result.data.notification_triggers || [];
     invoicePlanState.workCategories = Array.isArray(workCategories) ? workCategories : [];
 
     const tinkoffEl = document.getElementById('crmTinkoffBusinessToken');
@@ -3488,8 +3697,10 @@ async function loadCrmSettings() {
     setVal('financeEmailBcc', s.finance_email_bcc);
     setVal('financeEmailSubjectInvoice', s.finance_email_subject_invoice);
     setVal('financeEmailSubjectAct', s.finance_email_subject_act);
+    setVal('financeEmailSubjectReminder', s.finance_email_subject_reminder);
     setVal('financeEmailBodyInvoiceHtml', s.finance_email_body_invoice_html);
     setVal('financeEmailBodyActHtml', s.finance_email_body_act_html);
+    setVal('financeEmailBodyReminderHtml', s.finance_email_body_reminder_html);
 
     // Финансы: Telegram
     setVal('financeTelegramBotToken', s.finance_telegram_bot_token);
@@ -3510,6 +3721,9 @@ async function loadCrmSettings() {
     if (typeof fillProjectStatusesFromApi === 'function') {
       fillProjectStatusesFromApi(projectStatuses);
       projectStatusOptions = Array.isArray(projectStatuses) ? projectStatuses.map((s) => ({ code: s.code, name: s.name })) : [];
+    }
+    if (typeof fillNotificationTriggersFromApi === 'function') {
+      fillNotificationTriggersFromApi(notificationTriggers);
     }
   } catch (e) {
     console.error('loadCrmSettings error', e);
@@ -3539,6 +3753,7 @@ async function saveCrmSettings() {
   const roles = (typeof collectCrmRoles === 'function') ? collectCrmRoles() : [];
   const workCategories = (typeof collectWorkCategories === 'function') ? collectWorkCategories() : [];
   const projectStatuses = (typeof collectProjectStatuses === 'function') ? collectProjectStatuses() : [];
+  const notificationTriggers = (typeof collectNotificationTriggers === 'function') ? collectNotificationTriggers() : [];
 
   const getVal = (id) => {
     const el = document.getElementById(id);
@@ -3584,8 +3799,10 @@ async function saveCrmSettings() {
     finance_email_bcc: getVal('financeEmailBcc'),
     finance_email_subject_invoice: getVal('financeEmailSubjectInvoice'),
     finance_email_subject_act: getVal('financeEmailSubjectAct'),
+    finance_email_subject_reminder: getVal('financeEmailSubjectReminder'),
     finance_email_body_invoice_html: getVal('financeEmailBodyInvoiceHtml'),
     finance_email_body_act_html: getVal('financeEmailBodyActHtml'),
+    finance_email_body_reminder_html: getVal('financeEmailBodyReminderHtml'),
 
     finance_telegram_bot_token: getVal('financeTelegramBotToken'),
     telegram_default_message_invoice: getVal('financeTelegramDefaultMessageInvoice'),
@@ -3597,7 +3814,8 @@ async function saveCrmSettings() {
 
     roles: roles,
     work_categories: workCategories,
-    project_statuses: projectStatuses
+    project_statuses: projectStatuses,
+    notification_triggers: notificationTriggers
   };
 
   try {
@@ -3626,6 +3844,9 @@ async function saveCrmSettings() {
       projectStatusOptions = Array.isArray(result.data.project_statuses)
         ? result.data.project_statuses.map((s) => ({ code: s.code, name: s.name }))
         : [];
+    }
+    if (result.data && typeof fillNotificationTriggersFromApi === 'function') {
+      fillNotificationTriggersFromApi(result.data.notification_triggers || []);
     }
 
     if (typeof showToast === 'function') showToast('Настройки сохранены', 'success');
