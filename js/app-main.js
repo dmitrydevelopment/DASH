@@ -6986,6 +6986,9 @@ function initPaymentsHistory() {
     document.getElementById('paymentMatchSearchBtn')?.addEventListener('click', () => {
       searchPaymentMatchCandidates();
     });
+    document.getElementById('paymentMatchResetBtn')?.addEventListener('click', () => {
+      resetPaymentMatchSearchForm();
+    });
     setTab(financeSprint2State.paymentsTab || 'paid');
   }
   if (financeSprint2State.paymentsTab === 'unknown') {
@@ -7223,6 +7226,31 @@ function openPaymentMatchModal(operationId) {
 function closePaymentMatchModal() {
   const modal = document.getElementById('paymentMatchModal');
   if (modal) modal.classList.remove('active');
+  resetPaymentMatchSearchForm(true);
+}
+
+function resetPaymentMatchSearchForm(clearOperation = false) {
+  const client = document.getElementById('paymentMatchClient');
+  const docNumber = document.getElementById('paymentMatchDocNumber');
+  const dateFrom = document.getElementById('paymentMatchDateFrom');
+  const dateTo = document.getElementById('paymentMatchDateTo');
+  const amount = document.getElementById('paymentMatchAmount');
+  const type = document.getElementById('paymentMatchType');
+  const suggestions = document.getElementById('paymentMatchClientSuggestions');
+  const candidates = document.getElementById('paymentMatchCandidatesTable');
+  const info = document.getElementById('paymentMatchOperationInfo');
+  if (client) client.value = '';
+  if (docNumber) docNumber.value = '';
+  if (dateFrom) dateFrom.value = '';
+  if (dateTo) dateTo.value = '';
+  if (amount) amount.value = '';
+  if (type) type.value = '';
+  if (suggestions) suggestions.style.display = 'none';
+  if (candidates) candidates.innerHTML = '';
+  if (clearOperation) {
+    financeSprint2State.paymentMatchModalOperation = null;
+    if (info) info.innerHTML = '';
+  }
 }
 
 async function searchPaymentMatchCandidates() {
