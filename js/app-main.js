@@ -7281,9 +7281,6 @@ function initReceivablesSubcategory() {
       if (suggestions) suggestions.style.display = 'none';
       loadReceivablesFromApi();
     });
-    document.getElementById('receivablesDebtorsSearch')?.addEventListener('input', () => {
-      renderTopDebtorsTableFinance();
-    });
   }
   loadReceivablesFromApi();
 }
@@ -7347,11 +7344,7 @@ function renderAgingBucketsGridFromApi(buckets) {
 function renderTopDebtorsTableFinance() {
   const container = document.getElementById('topDebtorsTableFinance');
   if (!container) return;
-  const rows = [...(Array.isArray(financeSprint2State.receivables.invoice_timeline) ? financeSprint2State.receivables.invoice_timeline : [])];
-  const query = (document.getElementById('receivablesDebtorsSearch')?.value || '').trim().toLowerCase();
-  const filtered = query
-    ? rows.filter((r) => String(r.client || '').toLowerCase().includes(query))
-    : rows;
+  const filtered = [...(Array.isArray(financeSprint2State.receivables.invoice_timeline) ? financeSprint2State.receivables.invoice_timeline : [])];
 
   const field = financeSprint2State.topDebtorsSortOrder.field || 'client';
   const direction = financeSprint2State.topDebtorsSortOrder.direction || 'asc';
