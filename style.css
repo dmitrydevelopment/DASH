@@ -2195,6 +2195,17 @@ body {
   font-weight: var(--font-weight-medium);
 }
 
+/* Fix hover artifact on Finance overview tab button */
+#finance .finance-subcategories .subcategory-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .client-subcategory-content {
   position: relative;
 }
