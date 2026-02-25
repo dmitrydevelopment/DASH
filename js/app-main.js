@@ -591,6 +591,11 @@ function bindInvoicePlanModalActions() {
 
   const close = () => {
     modal.classList.remove('active');
+    modal.classList.remove('modal--stack-top');
+    const matchModal = document.getElementById('paymentMatchModal');
+    if (matchModal) {
+      matchModal.classList.remove('modal--stack-base');
+    }
     form?.reset();
     invoicePlanState.mode = 'send';
     invoicePlanState.currentPlan = null;
@@ -7293,10 +7298,15 @@ function createPaymentMatchCandidateCard(inv) {
 function openInvoicePlanEditFromPaymentMatch(planId) {
   const id = Number(planId || 0);
   if (!Number.isFinite(id) || id <= 0) return;
-  closePaymentMatchModal();
-  setTimeout(() => {
-    openInvoicePlanEdit(id);
-  }, 50);
+  const matchModal = document.getElementById('paymentMatchModal');
+  if (matchModal) {
+    matchModal.classList.add('modal--stack-base');
+  }
+  openInvoicePlanEdit(id);
+  const editModal = document.getElementById('invoicePlanSendModal');
+  if (editModal) {
+    editModal.classList.add('modal--stack-top');
+  }
 }
 
 async function confirmPaymentMatch(documentId) {

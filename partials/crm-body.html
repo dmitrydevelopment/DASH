@@ -423,34 +423,40 @@
                         </div>
                         <div class="modal-body">
                             <div class="payment-match-filters">
-                                <div class="period-selector payment-match-field">
-                                    <label for="paymentMatchClient">Клиент</label>
-                                    <input type="text" id="paymentMatchClient" class="period-select" placeholder="Имя клиента">
-                                    <div id="paymentMatchClientSuggestions" class="dadata-suggestions" style="display:none;"></div>
+                                <div class="payment-match-row">
+                                    <div class="period-selector payment-match-field">
+                                        <label for="paymentMatchClient">Клиент</label>
+                                        <input type="text" id="paymentMatchClient" class="period-select" placeholder="Имя клиента">
+                                        <div id="paymentMatchClientSuggestions" class="dadata-suggestions" style="display:none;"></div>
+                                    </div>
+                                    <div class="period-selector payment-match-field">
+                                        <label for="paymentMatchDocNumber">Номер счета</label>
+                                        <input type="text" id="paymentMatchDocNumber" class="period-select" placeholder="INV-...">
+                                    </div>
                                 </div>
-                                <div class="period-selector payment-match-field">
-                                    <label for="paymentMatchDocNumber">Номер счета</label>
-                                    <input type="text" id="paymentMatchDocNumber" class="period-select" placeholder="INV-...">
+                                <div class="payment-match-row">
+                                    <div class="period-selector payment-match-field">
+                                        <label for="paymentMatchDateFrom">Дата от</label>
+                                        <input type="date" id="paymentMatchDateFrom" class="period-select">
+                                    </div>
+                                    <div class="period-selector payment-match-field">
+                                        <label for="paymentMatchDateTo">Дата до</label>
+                                        <input type="date" id="paymentMatchDateTo" class="period-select">
+                                    </div>
                                 </div>
-                                <div class="period-selector payment-match-field">
-                                    <label for="paymentMatchDateFrom">Дата от</label>
-                                    <input type="date" id="paymentMatchDateFrom" class="period-select">
-                                </div>
-                                <div class="period-selector payment-match-field">
-                                    <label for="paymentMatchDateTo">Дата до</label>
-                                    <input type="date" id="paymentMatchDateTo" class="period-select">
-                                </div>
-                                <div class="period-selector payment-match-field">
-                                    <label for="paymentMatchAmount">Сумма</label>
-                                    <input type="number" id="paymentMatchAmount" class="period-select" step="0.01" min="0">
-                                </div>
-                                <div class="period-selector payment-match-field">
-                                    <label for="paymentMatchType">Тип</label>
-                                    <select id="paymentMatchType" class="period-select">
-                                        <option value="">Все</option>
-                                        <option value="support">Поддержка</option>
-                                        <option value="project">Проект</option>
-                                    </select>
+                                <div class="payment-match-row">
+                                    <div class="period-selector payment-match-field">
+                                        <label for="paymentMatchAmount">Сумма</label>
+                                        <input type="number" id="paymentMatchAmount" class="period-select" step="0.01" min="0">
+                                    </div>
+                                    <div class="period-selector payment-match-field">
+                                        <label for="paymentMatchType">Тип</label>
+                                        <select id="paymentMatchType" class="period-select">
+                                            <option value="">Все</option>
+                                            <option value="support">Поддержка</option>
+                                            <option value="project">Проект</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                             <div class="payment-match-actions">

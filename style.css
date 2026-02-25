@@ -4562,6 +4562,12 @@ body {
   margin-bottom: 12px;
 }
 
+.payment-match-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 .payment-match-field {
   width: 100%;
   display: block;
@@ -4591,6 +4597,41 @@ body {
 
 .payment-match-actions .btn {
   width: 100%;
+}
+
+#paymentMatchModal .modal-content {
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#paymentMatchModal .modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#paymentMatchCandidatesTable {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.modal.modal--stack-base {
+  z-index: 10000;
+}
+
+.modal.modal--stack-top {
+  z-index: 10020;
+}
+
+@media (max-width: 600px) {
+  .payment-match-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 #paymentMatchAmount::-webkit-inner-spin-button,
