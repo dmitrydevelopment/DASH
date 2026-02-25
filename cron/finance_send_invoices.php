@@ -140,7 +140,8 @@ if ($today === $startDate) {
                 $periodLabelPrep,
                 $workItemsJsonPrep,
                 $channelsJsonPrep,
-                $endDate
+                $endDate,
+                'support'
             );
             if ($createdPlanId > 0) {
                 echo "PLAN_PREPARED_END_MONTH client_id={$clientIdPrep} plan_id={$createdPlanId}\n";

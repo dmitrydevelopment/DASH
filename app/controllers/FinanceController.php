@@ -630,14 +630,30 @@ class FinanceController
             $types .= 'd';
             $params[] = (float)str_replace(',', '.', $amountRaw);
         }
-        if ($invoiceType === 'support') {
-            $where[] = "d.doc_number NOT LIKE 'INV-PLAN-%'";
-        } elseif ($invoiceType === 'project') {
-            $where[] = "d.doc_number LIKE 'INV-PLAN-%'";
+        $hasSourceType = $this->hasInvoicePlanColumn('source_type');
+        if ($hasSourceType) {
+            if ($invoiceType === 'project') {
+                $where[] = "EXISTS (SELECT 1 FROM invoice_plans ip WHERE ip.document_id = d.id AND ip.source_type = 'project')";
+            } elseif ($invoiceType === 'support') {
+                $where[] = "NOT EXISTS (SELECT 1 FROM invoice_plans ip WHERE ip.document_id = d.id AND ip.source_type = 'project')";
+            }
+        } else {
+            if ($invoiceType === 'support') {
+                $where[] = "d.doc_number NOT LIKE 'INV-PLAN-%'";
+            } elseif ($invoiceType === 'project') {
+                $where[] = "d.doc_number LIKE 'INV-PLAN-%'";
+            }
         }
 
+        $invoiceTypeExpr = $hasSourceType
+            ? "CASE WHEN EXISTS (SELECT 1 FROM invoice_plans ip WHERE ip.document_id = d.id AND ip.source_type = 'project')
+                    THEN 'project'
+                    ELSE 'support'
+               END"
+            : "CASE WHEN d.doc_number LIKE 'INV-PLAN-%' THEN 'project' ELSE 'support' END";
+
         $sql = "SELECT d.id, d.client_id, c.name AS client_name, d.doc_number, d.doc_date, d.total_sum, d.download_token,
-                       CASE WHEN d.doc_number LIKE 'INV-PLAN-%' THEN 'project' ELSE 'support' END AS invoice_type
+                       $invoiceTypeExpr AS invoice_type
                 FROM finance_documents d
                 INNER JOIN clients c ON c.id = d.client_id
                 WHERE " . implode(' AND ', $where) . "
@@ -1093,7 +1109,8 @@ class FinanceController
             'send_diadoc' => !empty($payload['send_diadoc']) ? 1 : 0,
         ], JSON_UNESCAPED_UNICODE);
 
-        $planId = $this->plans->create($clientId, $periodYear, $periodMonth, $periodLabel, $itemsJson, $channelsJson, $sendDate);
+        $sourceType = (isset($payload['invoice_type']) && (string)$payload['invoice_type'] === 'project') ? 'project' : 'support';
+        $planId = $this->plans->create($clientId, $periodYear, $periodMonth, $periodLabel, $itemsJson, $channelsJson, $sendDate, $sourceType);
         if ($planId <= 0) {
             sendError('CREATE_FAILED', 'Не удалось создать карточку счета', 500);
         }
@@ -1459,7 +1476,8 @@ class FinanceController
             $periodLabel,
             json_encode($items, JSON_UNESCAPED_UNICODE),
             $channelsJson,
-            $sendDate
+            $sendDate,
+            'project'
         );
         if ($planId <= 0) {
             sendError('CREATE_FAILED', 'Не удалось создать счет по проекту', 500);

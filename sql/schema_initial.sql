@@ -264,6 +264,7 @@ CREATE TABLE `invoice_plans` (
   `period_month` tinyint(3) UNSIGNED NOT NULL,
   `period_label` varchar(32) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('planned','sent_waiting_payment','paid') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'planned',
+  `source_type` enum('support','project') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'support',
   `work_items_json` mediumtext COLLATE utf8mb4_unicode_ci,
   `channels_json` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `document_id` int(10) UNSIGNED DEFAULT NULL,
@@ -492,6 +493,7 @@ ALTER TABLE `employee_schedule`
 ALTER TABLE `invoice_plans`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_invoice_plans_status` (`status`),
+  ADD KEY `idx_invoice_plans_source_type` (`source_type`),
   ADD KEY `idx_invoice_plans_period` (`period_year`,`period_month`),
   ADD KEY `idx_invoice_plans_client` (`client_id`),
   ADD KEY `idx_invoice_plans_document` (`document_id`);

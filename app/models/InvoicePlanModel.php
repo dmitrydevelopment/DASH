@@ -162,6 +162,7 @@ class InvoicePlanModel
         }
         $status = $isPaid ? 'paid' : 'sent_waiting_payment';
         $sentAt = preg_match('/^\d{4}-\d{2}-\d{2}$/', $docDate) ? ($docDate . ' 00:00:00') : date('Y-m-d H:i:s');
+        $sourceType = 'support';
 
         $items = [[
             'name' => 'Счет ' . (string)($doc['doc_number'] ?? ('#' . $docId)),
@@ -201,6 +202,11 @@ class InvoicePlanModel
             ];
             $types = 'sss';
             $values = [$status, $workItemsJson, $channelsJson];
+            if (isset($planCols['source_type'])) {
+                $set[] = "source_type = ?";
+                $types .= 's';
+                $values[] = $sourceType;
+            }
 
             if (isset($planCols['document_id'])) {
                 $set[] = "document_id = ?";
@@ -245,6 +251,12 @@ class InvoicePlanModel
         $placeholders = ['?', '?', '?', '?', '?', '?', '?'];
         $types = 'iiissss';
         $values = [$clientId, $periodYear, $periodMonth, $periodLabel, $status, $workItemsJson, $channelsJson];
+        if (isset($planCols['source_type'])) {
+            $fields[] = 'source_type';
+            $placeholders[] = '?';
+            $types .= 's';
+            $values[] = $sourceType;
+        }
 
         if (isset($planCols['document_id'])) {
             $fields[] = 'document_id';
@@ -293,16 +305,28 @@ class InvoicePlanModel
         return $id;
     }
 
-    public function create($clientId, $periodYear, $periodMonth, $periodLabel, $workItemsJson, $channelsJson, $plannedSendDate)
+    public function create($clientId, $periodYear, $periodMonth, $periodLabel, $workItemsJson, $channelsJson, $plannedSendDate, $sourceType = 'support')
     {
         $cols = $this->getInvoicePlanColumns();
         $withPlanned = isset($cols['planned_send_date']);
+        $withSourceType = isset($cols['source_type']);
+        $sourceType = ((string)$sourceType === 'project') ? 'project' : 'support';
 
-        if ($withPlanned) {
+        if ($withPlanned && $withSourceType) {
+            $stmt = $this->db->prepare("INSERT INTO invoice_plans
+                (client_id, period_year, period_month, period_label, status, source_type, work_items_json, channels_json, planned_send_date, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'planned', ?, ?, ?, ?, NOW(), NOW())");
+            $stmt->bind_param('iiisssss', $clientId, $periodYear, $periodMonth, $periodLabel, $sourceType, $workItemsJson, $channelsJson, $plannedSendDate);
+        } elseif ($withPlanned) {
             $stmt = $this->db->prepare("INSERT INTO invoice_plans
                 (client_id, period_year, period_month, period_label, status, work_items_json, channels_json, planned_send_date, created_at, updated_at)
                 VALUES (?, ?, ?, ?, 'planned', ?, ?, ?, NOW(), NOW())");
             $stmt->bind_param('iiissss', $clientId, $periodYear, $periodMonth, $periodLabel, $workItemsJson, $channelsJson, $plannedSendDate);
+        } elseif ($withSourceType) {
+            $stmt = $this->db->prepare("INSERT INTO invoice_plans
+                (client_id, period_year, period_month, period_label, status, source_type, work_items_json, channels_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, 'planned', ?, ?, ?, NOW(), NOW())");
+            $stmt->bind_param('iiissss', $clientId, $periodYear, $periodMonth, $periodLabel, $sourceType, $workItemsJson, $channelsJson);
         } else {
             $stmt = $this->db->prepare("INSERT INTO invoice_plans
                 (client_id, period_year, period_month, period_label, status, work_items_json, channels_json, created_at, updated_at)
