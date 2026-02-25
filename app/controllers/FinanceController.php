@@ -368,6 +368,16 @@ class FinanceController
         $profit = $monthIncome - $totalExpense;
         $margin = $monthIncome > 0 ? round(($profit / $monthIncome) * 100, 1) : 0.0;
 
+        $trendRows = $this->buildRevenueTrendRows(12);
+        $mom = 0.0;
+        $yoy = 0.0;
+        if (!empty($trendRows)) {
+            $last = $trendRows[count($trendRows) - 1];
+            $prev = count($trendRows) >= 2 ? $trendRows[count($trendRows) - 2] : null;
+            $mom = $prev ? $this->calcPercentChange((float)$last['revenue'], (float)$prev['revenue']) : 0.0;
+            $yoy = $this->calcPercentChange((float)$last['revenue'], (float)$last['previous_year']);
+        }
+
         sendJson([
             'data' => [
                 'income_total' => $monthIncome,
@@ -377,6 +387,9 @@ class FinanceController
                 'expense_salaries' => $salaryExpense,
                 'profit_total' => $profit,
                 'profit_margin_percent' => $margin,
+                'revenue_trends' => $trendRows,
+                'revenue_mom_percent' => $mom,
+                'revenue_yoy_percent' => $yoy,
             ],
         ]);
     }
@@ -1179,6 +1192,143 @@ class FinanceController
             'project_id' => (int)$id,
             'plan' => $result
         ]);
+    }
+
+    private function buildRevenueTrendRows($months = 12)
+    {
+        $months = max(1, (int)$months);
+        $startTs = strtotime(date('Y-m-01') . " - " . ($months - 1) . " months");
+        $startDate = date('Y-m-01', $startTs);
+        $historyStartDate = date('Y-m-01', strtotime($startDate . ' -12 months'));
+
+        $range = [];
+        for ($i = 0; $i < $months; $i++) {
+            $ts = strtotime(date('Y-m-01', $startTs) . " + {$i} months");
+            $year = (int)date('Y', $ts);
+            $month = (int)date('n', $ts);
+            $key = sprintf('%04d-%02d', $year, $month);
+            $range[$key] = [
+                'month' => $key,
+                'month_name' => $this->formatMonthLabelRu($year, $month),
+                'year' => $year,
+                'month_num' => $month,
+                'revenue' => 0.0,
+                'confirmed' => 0.0,
+                'projected' => 0.0,
+                'previous_year' => 0.0,
+            ];
+        }
+
+        $hasIsPaid = $this->hasFinanceDocColumn('is_paid');
+        $hasPaidStatus = $this->hasFinanceDocColumn('paid_status');
+        $hasPaidSum = $this->hasFinanceDocColumn('paid_sum');
+        $paidAmountExpr = $hasPaidSum ? "COALESCE(d.paid_sum, d.total_sum, 0)" : "COALESCE(d.total_sum, 0)";
+        if ($hasIsPaid && $hasPaidStatus) {
+            $paidCond = "(COALESCE(d.is_paid, 0) = 1 OR d.paid_status = 'paid')";
+        } elseif ($hasIsPaid) {
+            $paidCond = "COALESCE(d.is_paid, 0) = 1";
+        } elseif ($hasPaidStatus) {
+            $paidCond = "d.paid_status = 'paid'";
+        } else {
+            $paidCond = "0 = 1";
+        }
+
+        $docsSentMap = [];
+        $docsPaidMap = [];
+
+        $sqlDocs = "SELECT YEAR(d.doc_date) AS y, MONTH(d.doc_date) AS m,
+                           SUM(COALESCE(d.total_sum, 0)) AS sent_total,
+                           SUM(CASE WHEN $paidCond THEN $paidAmountExpr ELSE 0 END) AS paid_total
+                    FROM finance_documents d
+                    WHERE d.doc_type = 'invoice'
+                      AND d.doc_date >= ?
+                    GROUP BY YEAR(d.doc_date), MONTH(d.doc_date)";
+        $stmtDocs = $this->db->prepare($sqlDocs);
+        if ($stmtDocs) {
+            $stmtDocs->bind_param('s', $historyStartDate);
+            $stmtDocs->execute();
+            $res = $stmtDocs->get_result();
+            while ($res && ($row = $res->fetch_assoc())) {
+                $key = sprintf('%04d-%02d', (int)($row['y'] ?? 0), (int)($row['m'] ?? 0));
+                $docsSentMap[$key] = (float)($row['sent_total'] ?? 0);
+                $docsPaidMap[$key] = (float)($row['paid_total'] ?? 0);
+            }
+            $stmtDocs->close();
+        }
+
+        $sqlPlanned = "SELECT YEAR(p.planned_send_date) AS y, MONTH(p.planned_send_date) AS m,
+                              SUM(COALESCE(p.total_sum, 0)) AS planned_total
+                       FROM invoice_plans p
+                       WHERE p.status = 'planned'
+                         AND p.planned_send_date IS NOT NULL
+                         AND p.planned_send_date >= ?
+                       GROUP BY YEAR(p.planned_send_date), MONTH(p.planned_send_date)";
+        $stmtPlanned = $this->db->prepare($sqlPlanned);
+        if ($stmtPlanned) {
+            $stmtPlanned->bind_param('s', $startDate);
+            $stmtPlanned->execute();
+            $res = $stmtPlanned->get_result();
+            while ($res && ($row = $res->fetch_assoc())) {
+                $key = sprintf('%04d-%02d', (int)($row['y'] ?? 0), (int)($row['m'] ?? 0));
+                if (!isset($range[$key])) {
+                    continue;
+                }
+                $planned = (float)($row['planned_total'] ?? 0);
+                $range[$key]['projected'] = $range[$key]['confirmed'] + $planned;
+            }
+            $stmtPlanned->close();
+        }
+
+        foreach ($range as $key => &$row) {
+            if (isset($docsSentMap[$key])) {
+                $row['confirmed'] = (float)$docsSentMap[$key];
+            }
+            if (isset($docsPaidMap[$key])) {
+                $row['revenue'] = (float)$docsPaidMap[$key];
+            }
+            if ((float)$row['projected'] <= 0) {
+                $row['projected'] = (float)$row['confirmed'];
+            }
+            $prevKey = sprintf('%04d-%02d', (int)$row['year'] - 1, (int)$row['month_num']);
+            if (isset($docsPaidMap[$prevKey])) {
+                $row['previous_year'] = (float)$docsPaidMap[$prevKey];
+            }
+            unset($row['year'], $row['month_num']);
+        }
+        unset($row);
+
+        return array_values($range);
+    }
+
+    private function formatMonthLabelRu($year, $month)
+    {
+        $m = (int)$month;
+        $short = [
+            1 => 'Янв',
+            2 => 'Фев',
+            3 => 'Мар',
+            4 => 'Апр',
+            5 => 'Май',
+            6 => 'Июн',
+            7 => 'Июл',
+            8 => 'Авг',
+            9 => 'Сен',
+            10 => 'Окт',
+            11 => 'Ноя',
+            12 => 'Дек',
+        ];
+        $name = isset($short[$m]) ? $short[$m] : 'Мес';
+        return $name . ' ' . (int)$year;
+    }
+
+    private function calcPercentChange($current, $base)
+    {
+        $current = (float)$current;
+        $base = (float)$base;
+        if (abs($base) < 0.000001) {
+            return $current > 0 ? 100.0 : 0.0;
+        }
+        return round((($current - $base) / $base) * 100, 1);
     }
 
     private function getOverdueDaysSetting()

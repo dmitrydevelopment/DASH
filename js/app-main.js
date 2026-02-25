@@ -1318,7 +1318,7 @@ function switchFinanceSubcategory(subcategory) {
   }
 }
 
-function initActsSubcategory() {
+function initActsSubcategoryLegacy() {
   const root = document.getElementById('financeActsTable');
   if (!root) return;
 
@@ -1327,7 +1327,7 @@ function initActsSubcategory() {
     loadStatusBoard()
       .finally(() => {
         actsBootstrapLoading = false;
-        initActsSubcategory();
+        initActsSubcategoryLegacy();
       });
     root.innerHTML = '<div class="loading-indicator active">Загрузка данных...</div>';
     return;
@@ -1372,7 +1372,7 @@ function initActsSubcategory() {
   `;
 }
 
-function initFinanceOverview() {
+function initFinanceOverviewLegacy() {
   initCategoryChart();
   initIncomeExpenseChart();
   initRevenueTable();
@@ -1380,7 +1380,7 @@ function initFinanceOverview() {
   initRevenueTrendsChart();
 }
 
-function initPaymentsHistory() {
+function initPaymentsHistoryLegacy() {
   initHistoryPeriodSelector();
   updatePaymentsHistory();
 }
@@ -1665,7 +1665,7 @@ function sortPaymentsTable(field) {
   renderPaymentsHistoryTable(payments);
 }
 
-function initCategoryChart() {
+function initCategoryChartLegacy() {
   const ctx = document.getElementById('categoryChart');
   if (!ctx) return;
 
@@ -1715,7 +1715,7 @@ function initCategoryChart() {
   });
 }
 
-function initIncomeExpenseChart() {
+function initIncomeExpenseChartLegacy() {
   const ctx = document.getElementById('incomeExpenseChart');
   if (!ctx) return;
 
@@ -1775,7 +1775,7 @@ function initIncomeExpenseChart() {
   });
 }
 
-function initRevenueTable() {
+function initRevenueTableLegacy() {
   updateRevenueTable();
 }
 
@@ -2397,7 +2397,7 @@ function initNPSSubcategory() {
 }
 
 // Initialize receivables subcategory
-function initReceivablesSubcategory() {
+function initReceivablesSubcategoryLegacy() {
   console.log('Инициализация нового раздела задолженности...');
 
   // Обновляем метрики в верхнем ряду
@@ -3731,7 +3731,7 @@ function hideLoadingIndicator() {
 }
 
 // Receivables subcategory initialization
-function initReceivablesSubcategory() {
+function initReceivablesSubcategoryLegacy2() {
   console.log('Инициализация раздела задолженности...');
 
   // Принудительно показать раздел
@@ -4336,6 +4336,7 @@ async function loadCrmSettings() {
     // Финансы: нумерация
     setVal('financeInvoicePrefix', s.finance_invoice_number_prefix);
     setVal('financeActPrefix', s.finance_act_number_prefix);
+    setVal('financeTotalExpense', s.finance_total_expense);
 
     // Финансы: T-Bank
     setVal('financeTbankAccountNumber', s.finance_tbank_account_number);
@@ -4428,6 +4429,12 @@ async function saveCrmSettings() {
 
     finance_invoice_number_prefix: getVal('financeInvoicePrefix') || 'INV-',
     finance_act_number_prefix: getVal('financeActPrefix') || 'ACT-',
+    finance_total_expense: (() => {
+      const raw = getVal('financeTotalExpense').replace(',', '.');
+      const parsed = parseFloat(raw);
+      if (!Number.isFinite(parsed) || parsed < 0) return 0;
+      return parsed;
+    })(),
 
     finance_legal_name: getVal('financeLegalName'),
     finance_legal_inn: getVal('financeLegalInn'),
@@ -6862,7 +6869,7 @@ window.getPriorityText = getPriorityText;
 window.getDebtorActionRecommendations = getDebtorActionRecommendations;
 
 // Revenue Trends Chart
-function initRevenueTrendsChart() {
+function initRevenueTrendsChartLegacy() {
   const ctx = document.getElementById('revenueTrendsChart');
   if (!ctx) return;
 
@@ -7008,12 +7015,12 @@ function initRevenueTrendsChart() {
   const periodSelect = document.getElementById('revenueTrendsPeriod');
   if (periodSelect) {
     periodSelect.addEventListener('change', (e) => {
-      updateRevenueTrendsPeriod(e.target.value);
+      updateRevenueTrendsPeriodLegacy(e.target.value);
     });
   }
 }
 
-function updateRevenueTrendsPeriod(period) {
+function updateRevenueTrendsPeriodLegacy(period) {
   let dataToShow = revenueTrendsData;
 
   switch (period) {
@@ -7956,7 +7963,10 @@ const financeSprint2State = {
     expense_fixed: 0,
     expense_salaries: 0,
     profit_total: 0,
-    profit_margin_percent: 0
+    profit_margin_percent: 0,
+    revenue_trends: [],
+    revenue_mom_percent: 0,
+    revenue_yoy_percent: 0
   },
   payments: [],
   receivables: {
@@ -7969,7 +7979,8 @@ const financeSprint2State = {
   invoiceTimelineSortOrder: { field: null, direction: 'asc' },
   historyBindDone: false,
   receivablesBindDone: false,
-  actsBindDone: false
+  actsBindDone: false,
+  financeClientAutocompleteInit: false
 };
 
 async function fetchFinanceJson(url) {
@@ -7991,7 +8002,6 @@ async function fetchFinanceJson(url) {
 
 function initFinanceOverview() {
   loadFinanceOverviewFromApi();
-  initRevenueTrendsChart();
 }
 
 async function loadFinanceOverviewFromApi() {
@@ -8002,10 +8012,109 @@ async function loadFinanceOverviewFromApi() {
     initCategoryChart();
     initIncomeExpenseChart();
     initRevenueTable();
+    initRevenueTrendsChart();
+    renderRevenueTrendMetrics();
   } catch (err) {
     console.error('loadFinanceOverviewFromApi failed', err);
     showToast('Не удалось загрузить обзор финансов', 'error');
   }
+}
+
+function getFinanceRevenueTrends(period = '12_months') {
+  const rows = Array.isArray(financeSprint2State.overview?.revenue_trends)
+    ? financeSprint2State.overview.revenue_trends
+    : [];
+  if (period === '3_months') return rows.slice(-3);
+  if (period === '6_months') return rows.slice(-6);
+  return rows;
+}
+
+function renderRevenueTrendMetrics() {
+  const momEl = document.getElementById('revenueMoMValue');
+  const yoyEl = document.getElementById('revenueYoYValue');
+  const mom = Number(financeSprint2State.overview?.revenue_mom_percent || 0);
+  const yoy = Number(financeSprint2State.overview?.revenue_yoy_percent || 0);
+  if (momEl) {
+    momEl.textContent = `${mom >= 0 ? '+' : ''}${mom.toFixed(1)}%`;
+    momEl.classList.toggle('positive', mom >= 0);
+    momEl.classList.toggle('negative', mom < 0);
+  }
+  if (yoyEl) {
+    yoyEl.textContent = `${yoy >= 0 ? '+' : ''}${yoy.toFixed(1)}%`;
+    yoyEl.classList.toggle('positive', yoy >= 0);
+    yoyEl.classList.toggle('negative', yoy < 0);
+  }
+}
+
+function ensureFinanceClientAutocompleteBinding() {
+  if (financeSprint2State.financeClientAutocompleteInit) return;
+  financeSprint2State.financeClientAutocompleteInit = true;
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (target && target.closest && target.closest('.finance-client-suggestion-item')) {
+      return;
+    }
+    ['historyClientSuggestions', 'receivablesClientSuggestions', 'actsClientSuggestions'].forEach((id) => {
+      const box = document.getElementById(id);
+      if (box) {
+        box.style.display = 'none';
+      }
+    });
+  });
+}
+
+function bindFinanceClientAutocomplete(inputId, suggestionId) {
+  ensureFinanceClientAutocompleteBinding();
+  const input = document.getElementById(inputId);
+  const box = document.getElementById(suggestionId);
+  if (!input || !box || input.dataset.financeClientAutocomplete === '1') return;
+  input.dataset.financeClientAutocomplete = '1';
+
+  const render = () => {
+    const query = String(input.value || '').trim().toLowerCase();
+    const source = getInvoicePlanClientsSource();
+    if (!query || !source.length) {
+      box.innerHTML = '';
+      box.style.display = 'none';
+      return;
+    }
+    const rows = source
+      .filter((c) => normalizeClientNameForSearch(c.name).startsWith(query))
+      .slice(0, 10);
+    if (!rows.length) {
+      box.innerHTML = '';
+      box.style.display = 'none';
+      return;
+    }
+    box.innerHTML = rows.map((c) => `
+      <div class="dadata-suggestion-item finance-client-suggestion-item" data-client-name="${escapeHtml(c.name || '')}">
+        <span class="dadata-suggestion-title">${escapeHtml(c.name || '')}</span>
+        <span class="dadata-suggestion-subtitle">${escapeHtml(c.email || 'Без email')}</span>
+      </div>
+    `).join('');
+    box.style.display = 'block';
+  };
+
+  const onInput = async () => {
+    await ensureInvoicePlanClients(true);
+    render();
+  };
+
+  input.addEventListener('input', onInput);
+  input.addEventListener('focus', onInput);
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (box) box.style.display = 'none';
+    }, 150);
+  });
+
+  box.addEventListener('mousedown', (event) => {
+    const item = event.target && event.target.closest ? event.target.closest('.finance-client-suggestion-item') : null;
+    if (!item) return;
+    input.value = item.dataset.clientName || '';
+    box.style.display = 'none';
+    event.preventDefault();
+  });
 }
 
 function renderFinanceOverviewCards() {
@@ -8140,7 +8249,128 @@ function initRevenueTable() {
   `;
 }
 
+function initRevenueTrendsChart() {
+  const ctx = document.getElementById('revenueTrendsChart');
+  if (!ctx) return;
+  const periodSelect = document.getElementById('revenueTrendsPeriod');
+  const period = periodSelect?.value || '12_months';
+  const data = getFinanceRevenueTrends(period);
+
+  if (charts.revenueTrends) {
+    charts.revenueTrends.destroy();
+  }
+
+  charts.revenueTrends = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map((d) => d.month_name || ''),
+      datasets: [
+        {
+          label: 'Фактическая выручка',
+          data: data.map((d) => Number(d.revenue || 0)),
+          borderColor: '#1FB8CD',
+          backgroundColor: 'rgba(31, 184, 205, 0.1)',
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: '#1FB8CD',
+          pointBorderColor: '#ffffff',
+          pointBorderWidth: 2,
+          pointRadius: 6
+        },
+        {
+          label: 'Подтвержденная выручка',
+          data: data.map((d) => Number(d.confirmed || 0)),
+          borderColor: '#FFC185',
+          backgroundColor: 'rgba(255, 193, 133, 0.1)',
+          borderWidth: 2,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: '#FFC185',
+          pointRadius: 4
+        },
+        {
+          label: 'Прогнозная выручка',
+          data: data.map((d) => Number(d.projected || 0)),
+          borderColor: '#B4413C',
+          backgroundColor: 'rgba(180, 65, 60, 0.1)',
+          borderWidth: 2,
+          fill: false,
+          tension: 0.4,
+          borderDash: [5, 5],
+          pointBackgroundColor: '#B4413C',
+          pointRadius: 4
+        },
+        {
+          label: 'Прошлый год',
+          data: data.map((d) => Number(d.previous_year || 0)),
+          borderColor: '#5D878F',
+          backgroundColor: 'rgba(93, 135, 143, 0.1)',
+          borderWidth: 1,
+          fill: false,
+          tension: 0.4,
+          borderDash: [10, 5],
+          pointBackgroundColor: '#5D878F',
+          pointRadius: 3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        intersect: false,
+        mode: 'index'
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: 'rgba(255, 255, 255, 0.8)',
+            padding: 20,
+            font: { size: 12 }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255, 255, 255, 0.1)' },
+          ticks: {
+            color: 'rgba(255, 255, 255, 0.7)',
+            callback: (value) => formatCurrency(Number(value || 0))
+          }
+        },
+        x: {
+          grid: { color: 'rgba(255, 255, 255, 0.1)' },
+          ticks: { color: 'rgba(255, 255, 255, 0.7)' }
+        }
+      }
+    }
+  });
+
+  if (periodSelect && periodSelect.dataset.financeTrendBind !== '1') {
+    periodSelect.dataset.financeTrendBind = '1';
+    periodSelect.addEventListener('change', () => updateRevenueTrendsPeriod(periodSelect.value));
+  }
+}
+
+function updateRevenueTrendsPeriod(period) {
+  if (!charts.revenueTrends) {
+    initRevenueTrendsChart();
+    return;
+  }
+  const data = getFinanceRevenueTrends(period);
+  charts.revenueTrends.data.labels = data.map((d) => d.month_name || '');
+  charts.revenueTrends.data.datasets[0].data = data.map((d) => Number(d.revenue || 0));
+  charts.revenueTrends.data.datasets[1].data = data.map((d) => Number(d.confirmed || 0));
+  charts.revenueTrends.data.datasets[2].data = data.map((d) => Number(d.projected || 0));
+  charts.revenueTrends.data.datasets[3].data = data.map((d) => Number(d.previous_year || 0));
+  charts.revenueTrends.update('active');
+}
+
 function initPaymentsHistory() {
+  bindFinanceClientAutocomplete('historyClientSearch', 'historyClientSuggestions');
   if (!financeSprint2State.historyBindDone) {
     financeSprint2State.historyBindDone = true;
     document.getElementById('historyApplyBtn')?.addEventListener('click', () => {
@@ -8150,9 +8380,11 @@ function initPaymentsHistory() {
       const from = document.getElementById('historyDateFrom');
       const to = document.getElementById('historyDateTo');
       const client = document.getElementById('historyClientSearch');
+      const suggestions = document.getElementById('historyClientSuggestions');
       if (from) from.value = '';
       if (to) to.value = '';
       if (client) client.value = '';
+      if (suggestions) suggestions.style.display = 'none';
       loadPaymentsHistoryFromApi();
     });
   }
@@ -8252,6 +8484,7 @@ function applyCustomDateRange() {
 }
 
 function initReceivablesSubcategory() {
+  bindFinanceClientAutocomplete('receivablesClientSearch', 'receivablesClientSuggestions');
   if (!financeSprint2State.receivablesBindDone) {
     financeSprint2State.receivablesBindDone = true;
     document.getElementById('receivablesApplyBtn')?.addEventListener('click', () => {
@@ -8261,9 +8494,11 @@ function initReceivablesSubcategory() {
       const from = document.getElementById('receivablesDateFrom');
       const to = document.getElementById('receivablesDateTo');
       const client = document.getElementById('receivablesClientSearch');
+      const suggestions = document.getElementById('receivablesClientSuggestions');
       if (from) from.value = '';
       if (to) to.value = '';
       if (client) client.value = '';
+      if (suggestions) suggestions.style.display = 'none';
       loadReceivablesFromApi();
     });
   }
@@ -8448,6 +8683,7 @@ function sortInvoiceTimelineTable(field) {
 }
 
 function initActsSubcategory() {
+  bindFinanceClientAutocomplete('actsClientSearch', 'actsClientSuggestions');
   if (!financeSprint2State.actsBindDone) {
     financeSprint2State.actsBindDone = true;
     document.getElementById('actsApplyBtn')?.addEventListener('click', () => loadActsFromApi());
@@ -8455,9 +8691,11 @@ function initActsSubcategory() {
       const from = document.getElementById('actsDateFrom');
       const to = document.getElementById('actsDateTo');
       const client = document.getElementById('actsClientSearch');
+      const suggestions = document.getElementById('actsClientSuggestions');
       if (from) from.value = '';
       if (to) to.value = '';
       if (client) client.value = '';
+      if (suggestions) suggestions.style.display = 'none';
       loadActsFromApi();
     });
   }

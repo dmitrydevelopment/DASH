@@ -108,6 +108,7 @@ class SettingsModel
 
             'finance_invoice_number_prefix' => (string) $this->col($row, $cols, 'finance_invoice_number_prefix', 'INV-'),
             'finance_act_number_prefix' => (string) $this->col($row, $cols, 'finance_act_number_prefix', 'ACT-'),
+            'finance_total_expense' => (float) $this->col($row, $cols, 'finance_total_expense', 0),
 
             'finance_legal_name' => (string) $this->col($row, $cols, 'finance_legal_name', ''),
             'finance_legal_inn' => (string) $this->col($row, $cols, 'finance_legal_inn', ''),
@@ -158,6 +159,7 @@ class SettingsModel
 
             'finance_invoice_number_prefix' => ['col' => 'finance_invoice_number_prefix', 'type' => 's'],
             'finance_act_number_prefix' => ['col' => 'finance_act_number_prefix', 'type' => 's'],
+            'finance_total_expense' => ['col' => 'finance_total_expense', 'type' => 's'],
 
             'finance_legal_name' => ['col' => 'finance_legal_name', 'type' => 's'],
             'finance_legal_inn' => ['col' => 'finance_legal_inn', 'type' => 's'],

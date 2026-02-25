@@ -278,14 +278,14 @@
                     <div class="chart-container" style="height: 400px;">
                         <canvas id="revenueTrendsChart"></canvas>
                     </div>
-                    <div class="revenue-metrics">
+                        <div class="revenue-metrics">
                         <div class="metric-card">
                             <div class="metric-label">Месяц к месяцу</div>
-                            <div class="metric-value positive">+22.5%</div>
+                            <div class="metric-value positive" id="revenueMoMValue">0%</div>
                         </div>
                         <div class="metric-card">
                             <div class="metric-label">Год к году</div>
-                            <div class="metric-value positive">+18.7%</div>
+                            <div class="metric-value positive" id="revenueYoYValue">0%</div>
                         </div>
                     </div>
                 </div>
@@ -364,6 +364,7 @@
                                 <div class="period-selector">
                                     <label for="historyClientSearch">Клиент:</label>
                                     <input type="text" id="historyClientSearch" class="period-select" placeholder="Поиск по клиенту">
+                                    <div id="historyClientSuggestions" class="dadata-suggestions" style="display:none;"></div>
                                 </div>
                                 <div class="period-selector" style="display:flex; align-items:flex-end; gap:8px;">
                                     <button type="button" class="btn btn--primary" id="historyApplyBtn">Применить</button>
@@ -417,6 +418,7 @@
                                 <div class="period-selector">
                                     <label for="receivablesClientSearch">Клиент:</label>
                                     <input type="text" id="receivablesClientSearch" class="period-select" placeholder="Поиск по клиенту">
+                                    <div id="receivablesClientSuggestions" class="dadata-suggestions" style="display:none;"></div>
                                 </div>
                                 <div class="period-selector" style="display:flex; align-items:flex-end; gap:8px;">
                                     <button type="button" class="btn btn--primary" id="receivablesApplyBtn">Применить</button>
@@ -531,6 +533,7 @@
                                 <div class="period-selector">
                                     <label for="actsClientSearch">Клиент:</label>
                                     <input type="text" id="actsClientSearch" class="period-select" placeholder="Поиск по клиенту">
+                                    <div id="actsClientSuggestions" class="dadata-suggestions" style="display:none;"></div>
                                 </div>
                                 <div class="period-selector" style="display:flex; align-items:flex-end; gap:8px;">
                                     <button type="button" class="btn btn--primary" id="actsApplyBtn">Применить</button>
@@ -997,6 +1000,15 @@
         <label for="financeActPrefix">Префикс номера акта</label>
         <input type="text" id="financeActPrefix" placeholder="ACT-">
     </div>
+</div>
+
+<div class="section-header" style="margin-top: var(--space-16);">
+    <h3>Расходы</h3>
+</div>
+
+<div class="form-group">
+    <label for="financeTotalExpense">Ежемесячные расходы</label>
+    <input type="number" id="financeTotalExpense" min="0" step="0.01" placeholder="0">
 </div>
                 </div>
 

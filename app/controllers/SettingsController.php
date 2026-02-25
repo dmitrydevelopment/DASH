@@ -145,6 +145,15 @@ class SettingsController
             }
         }
 
+        $financeTotalExpense = 0.0;
+        if (isset($payload['finance_total_expense'])) {
+            $expenseRaw = str_replace(',', '.', trim((string)$payload['finance_total_expense']));
+            $financeTotalExpense = (float)$expenseRaw;
+            if ($financeTotalExpense < 0) {
+                sendError('VALIDATION_ERROR', 'Ежемесячные расходы не могут быть отрицательными.');
+            }
+        }
+
         $ok = $this->settings->save([
             'tinkoff_business_token' => (string) ($payload['tinkoff_business_token'] ?? ''),
             'dadata_token' => (string) ($payload['dadata_token'] ?? ''),
@@ -160,6 +169,7 @@ class SettingsController
 
             'finance_invoice_number_prefix' => (string) ($payload['finance_invoice_number_prefix'] ?? 'INV-'),
             'finance_act_number_prefix' => (string) ($payload['finance_act_number_prefix'] ?? 'ACT-'),
+            'finance_total_expense' => (string)$financeTotalExpense,
 
             'finance_legal_name' => (string) ($payload['finance_legal_name'] ?? ''),
             'finance_legal_inn' => (string) ($payload['finance_legal_inn'] ?? ''),
