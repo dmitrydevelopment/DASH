@@ -189,6 +189,58 @@ class InvoicePlanModel
             }
         }
 
+        // If a plan for this client+period already exists, remap it to this document
+        // instead of inserting a duplicate (uniq_plan_period).
+        $existingPeriodPlan = $this->findByClientPeriod($clientId, $periodYear, $periodMonth);
+        if ($existingPeriodPlan && !empty($existingPeriodPlan['id'])) {
+            $existingId = (int)$existingPeriodPlan['id'];
+            $set = [
+                "status = ?",
+                "work_items_json = ?",
+                "channels_json = ?"
+            ];
+            $types = 'sss';
+            $values = [$status, $workItemsJson, $channelsJson];
+
+            if (isset($planCols['document_id'])) {
+                $set[] = "document_id = ?";
+                $types .= 'i';
+                $values[] = $docId;
+            }
+            if (isset($planCols['sent_at'])) {
+                $set[] = "sent_at = ?";
+                $types .= 's';
+                $values[] = $sentAt;
+            }
+            if (isset($planCols['planned_send_date'])) {
+                $set[] = "planned_send_date = ?";
+                $types .= 's';
+                $values[] = substr($sentAt, 0, 10);
+            }
+            if (isset($planCols['updated_at'])) {
+                $set[] = "updated_at = NOW()";
+            }
+
+            $sql = "UPDATE invoice_plans SET " . implode(', ', $set) . " WHERE id = ?";
+            $stmt = $this->db->prepare($sql);
+            if ($stmt) {
+                $types .= 'i';
+                $values[] = $existingId;
+                $refs = [];
+                $refs[] = &$types;
+                foreach ($values as $k => $v) {
+                    $values[$k] = $v;
+                    $refs[] = &$values[$k];
+                }
+                call_user_func_array([$stmt, 'bind_param'], $refs);
+                $ok = $stmt->execute();
+                $stmt->close();
+                if ($ok) {
+                    return $existingId;
+                }
+            }
+        }
+
         $fields = ['client_id', 'period_year', 'period_month', 'period_label', 'status', 'work_items_json', 'channels_json'];
         $placeholders = ['?', '?', '?', '?', '?', '?', '?'];
         $types = 'iiissss';

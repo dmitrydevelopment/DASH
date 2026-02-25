@@ -199,8 +199,10 @@ class FinanceController
             $invoiceBaseDate = !empty($row['invoice_doc_date']) ? (string)$row['invoice_doc_date'] : (string)($row['sent_at'] ?? '');
             $row['days_since_sent'] = $invoiceBaseDate !== '' ? (int) floor((time() - strtotime($invoiceBaseDate)) / 86400) : 0;
 
-            if (($row['status'] ?? '') === 'planned') {
-                // Planned invoices must stay visible in kanban and not disappear.
+            if (($row['status'] ?? '') === 'planned'
+                && (int)($row['send_invoice_schedule'] ?? 0) === 1
+                && (int)($row['invoice_use_end_month_date'] ?? 0) === 1
+            ) {
                 $endMonth[] = $row;
                 continue;
             }

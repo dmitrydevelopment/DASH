@@ -86,6 +86,70 @@ $docs = new FinanceDocumentModel($db);
 $events = new FinanceSendEventModel($db);
 $plans = new InvoicePlanModel($db);
 
+// On the first workday we only prepare End-Month plan cards (without sending).
+if ($today === $startDate) {
+    $prepSql = "SELECT id, email, send_invoice_telegram, send_invoice_diadoc
+                FROM clients
+                WHERE is_active = 1
+                  AND send_invoice_schedule = 1
+                  AND COALESCE(invoice_use_end_month_date, 0) = 1";
+    $prepRes = $db->query($prepSql);
+    if ($prepRes) {
+        while ($pc = $prepRes->fetch_assoc()) {
+            $clientIdPrep = (int)($pc['id'] ?? 0);
+            if ($clientIdPrep <= 0) {
+                continue;
+            }
+            $existingPlan = $plans->findByClientPeriod($clientIdPrep, $year, $month);
+            if ($existingPlan && !empty($existingPlan['id'])) {
+                continue;
+            }
+
+            $itemsSnapshot = [];
+            $stmtPrep = $db->prepare("SELECT service_name, service_price FROM client_invoice_items WHERE client_id = ? ORDER BY sort_order ASC, id ASC");
+            if (!$stmtPrep) {
+                continue;
+            }
+            $stmtPrep->bind_param("i", $clientIdPrep);
+            $stmtPrep->execute();
+            $prepItemsRes = $stmtPrep->get_result();
+            while ($it = $prepItemsRes->fetch_assoc()) {
+                $itemsSnapshot[] = [
+                    'name' => (string)($it['service_name'] ?? ''),
+                    'amount' => (float)($it['service_price'] ?? 0),
+                    'category' => ''
+                ];
+            }
+            $stmtPrep->close();
+            if (empty($itemsSnapshot)) {
+                continue;
+            }
+
+            $channelsJsonPrep = json_encode([
+                'email' => trim((string)($pc['email'] ?? '')),
+                'send_telegram' => !empty($pc['send_invoice_telegram']) ? 1 : 0,
+                'send_diadoc' => !empty($pc['send_invoice_diadoc']) ? 1 : 0
+            ], JSON_UNESCAPED_UNICODE);
+            $workItemsJsonPrep = json_encode($itemsSnapshot, JSON_UNESCAPED_UNICODE);
+            $periodLabelPrep = sprintf('%02d.%04d', $month, $year);
+
+            $createdPlanId = $plans->create(
+                $clientIdPrep,
+                $year,
+                $month,
+                $periodLabelPrep,
+                $workItemsJsonPrep,
+                $channelsJsonPrep,
+                $endDate
+            );
+            if ($createdPlanId > 0) {
+                echo "PLAN_PREPARED_END_MONTH client_id={$clientIdPrep} plan_id={$createdPlanId}\n";
+            }
+        }
+        $prepRes->close();
+    }
+}
+
 $clientSql = "SELECT id, name, legal_name, inn, kpp, email, additional_email, telegram_id, chat_id,
                     send_invoice_schedule, invoice_use_end_month_date, send_invoice_telegram, send_invoice_diadoc
              FROM clients
