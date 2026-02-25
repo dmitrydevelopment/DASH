@@ -4645,9 +4645,10 @@ body {
   }
 }
 
-#crmNotificationTriggersList input.crmNotificationTriggerTelegram,
-#crmNotificationTriggersList input.crmNotificationTriggerEmail {
-  width: auto;
+#crmNotificationTriggersList input.crmNotificationTriggerTelegram[type="checkbox"],
+#crmNotificationTriggersList input.crmNotificationTriggerEmail[type="checkbox"] {
+  width: auto !important;
+  flex: 0 0 auto;
 }
 
 .inline-checkbox {
