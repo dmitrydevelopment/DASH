@@ -4600,7 +4600,7 @@ body {
 
 .crm-notification-trigger-row .crm-notification-trigger-trash {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 .inline-checkbox {
