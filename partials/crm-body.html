@@ -377,34 +377,22 @@
                     <div class="payments-history-section">
                         <div class="history-controls">
                             <h3>История поступлений</h3>
-                            <div class="history-period-controls">
+                            <div class="history-period-controls" style="display:flex; gap:12px; flex-wrap:wrap;">
                                 <div class="period-selector">
-                                    <label for="historyYearSelect">Год:</label>
-                                    <select id="historyYearSelect" class="period-select">
-                                        <option value="2024" selected>2024</option>
-                                        <option value="2023">2023</option>
-                                        <option value="2022">2022</option>
-                                        <option value="2021">2021</option>
-                                        <option value="2020">2020</option>
-                                        <option value="2019">2019</option>
-                                    </select>
+                                    <label for="historyDateFrom">От:</label>
+                                    <input type="date" id="historyDateFrom" class="period-select">
                                 </div>
                                 <div class="period-selector">
-                                    <label for="historyMonthSelect">Месяц:</label>
-                                    <select id="historyMonthSelect" class="period-select">
-                                        <option value="1">Январь</option>
-                                        <option value="2">Февраль</option>
-                                        <option value="3">Март</option>
-                                        <option value="4">Апрель</option>
-                                        <option value="5">Май</option>
-                                        <option value="6">Июнь</option>
-                                        <option value="7">Июль</option>
-                                        <option value="8">Август</option>
-                                        <option value="9">Сентябрь</option>
-                                        <option value="10" selected>Октябрь</option>
-                                        <option value="11">Ноябрь</option>
-                                        <option value="12">Декабрь</option>
-                                    </select>
+                                    <label for="historyDateTo">До:</label>
+                                    <input type="date" id="historyDateTo" class="period-select">
+                                </div>
+                                <div class="period-selector">
+                                    <label for="historyClientSearch">Клиент:</label>
+                                    <input type="text" id="historyClientSearch" class="period-select" placeholder="Поиск по клиенту">
+                                </div>
+                                <div class="period-selector" style="display:flex; align-items:flex-end; gap:8px;">
+                                    <button type="button" class="btn btn--primary" id="historyApplyBtn">Применить</button>
+                                    <button type="button" class="btn btn--secondary" id="historyResetBtn">Сброс</button>
                                 </div>
                             </div>
                         </div>
@@ -440,45 +428,59 @@
                 <!-- Receivables Subcategory -->
                 <div class="subcategory-content" id="finance-receivables">
                     <div class="receivables-section">
-                        <!-- Section Header -->
-                        <div class="receivables-header">
-                            <h1>Дебиторская задолженность</h1>
-                            <p class="tab-subtitle">Анализ задолженности и контроль оплат</p>
+                        <div class="history-controls">
+                            <h3>Задолженности</h3>
+                            <div class="history-period-controls" style="display:flex; gap:12px; flex-wrap:wrap;">
+                                <div class="period-selector">
+                                    <label for="receivablesDateFrom">От:</label>
+                                    <input type="date" id="receivablesDateFrom" class="period-select">
+                                </div>
+                                <div class="period-selector">
+                                    <label for="receivablesDateTo">До:</label>
+                                    <input type="date" id="receivablesDateTo" class="period-select">
+                                </div>
+                                <div class="period-selector">
+                                    <label for="receivablesClientSearch">Клиент:</label>
+                                    <input type="text" id="receivablesClientSearch" class="period-select" placeholder="Поиск по клиенту">
+                                </div>
+                                <div class="period-selector" style="display:flex; align-items:flex-end; gap:8px;">
+                                    <button type="button" class="btn btn--primary" id="receivablesApplyBtn">Применить</button>
+                                    <button type="button" class="btn btn--secondary" id="receivablesResetBtn">Сброс</button>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- Top Row - 4 Metric Cards -->
                         <div class="receivables-metrics-grid">
                             <div class="metric-card receivables-metric">
                                 <div class="metric-icon">💰</div>
                                 <div class="metric-content">
                                     <h3>Общая задолженность</h3>
-                                    <div class="metric-value" style="color: #FF8C00;">318,000 ₽</div>
+                                    <div class="metric-value" style="color: #FF8C00;" id="totalReceivablesFinance">0 ₽</div>
                                 </div>
                             </div>
                             <div class="metric-card receivables-metric">
                                 <div class="metric-icon" style="color: #1FB8CD;">📊</div>
                                 <div class="metric-content">
                                     <h3>Количество счетов</h3>
-                                    <div class="metric-value" style="color: #ffffff;">18</div>
+                                    <div class="metric-value" style="color: #ffffff;" id="totalInvoicesFinance">0</div>
                                 </div>
                             </div>
                             <div class="metric-card receivables-metric">
                                 <div class="metric-icon" style="color: #DC2626;">⚠️</div>
                                 <div class="metric-content">
                                     <h3>Просрочено 90+ дней</h3>
-                                    <div class="metric-value" style="color: #DC2626;">28,000 ₽</div>
+                                    <div class="metric-value" style="color: #DC2626;" id="overdue90PlusFinance">0 ₽</div>
                                 </div>
                             </div>
                             <div class="metric-card receivables-metric">
                                 <div class="metric-icon" style="color: #FF8C00;">🕐</div>
                                 <div class="metric-content">
                                     <h3>Средний срок погашения</h3>
-                                    <div class="metric-value" style="color: #FF8C00;">45 дней</div>
+                                    <div class="metric-value" style="color: #FF8C00;" id="avgCollectionTime">0 дней</div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Aging Buckets Section -->
                         <div class="aging-buckets-section-new">
                             <div class="section-header">
                                 <h3>Возрастные корзины</h3>
@@ -489,93 +491,51 @@
                                     <div class="bucket-header">
                                         <h4>0-30 дней</h4>
                                     </div>
-                                    <div class="bucket-amount" style="color: #FF8C00;">156,000 ₽</div>
-                                    <div class="bucket-count">8 счетов</div>
-                                    <div class="bucket-percentage">49.1%</div>
+                                    <div class="bucket-amount" style="color: #FF8C00;" id="bucket-0-30-amount">0 ₽</div>
+                                    <div class="bucket-count" id="bucket-0-30-count">0 счетов</div>
+                                    <div class="bucket-percentage" id="bucket-0-30-percentage">0%</div>
                                 </div>
                                 <div class="aging-bucket-new bucket-yellow">
                                     <div class="bucket-header">
                                         <h4>31-60 дней</h4>
                                     </div>
-                                    <div class="bucket-amount" style="color: #FF8C00;">89,000 ₽</div>
-                                    <div class="bucket-count">5 счетов</div>
-                                    <div class="bucket-percentage">28.0%</div>
+                                    <div class="bucket-amount" style="color: #FF8C00;" id="bucket-31-60-amount">0 ₽</div>
+                                    <div class="bucket-count" id="bucket-31-60-count">0 счетов</div>
+                                    <div class="bucket-percentage" id="bucket-31-60-percentage">0%</div>
                                 </div>
                                 <div class="aging-bucket-new bucket-orange">
                                     <div class="bucket-header">
                                         <h4>61-90 дней</h4>
                                     </div>
-                                    <div class="bucket-amount" style="color: #FF8C00;">45,000 ₽</div>
-                                    <div class="bucket-count">3 счета</div>
-                                    <div class="bucket-percentage">14.2%</div>
+                                    <div class="bucket-amount" style="color: #FF8C00;" id="bucket-61-90-amount">0 ₽</div>
+                                    <div class="bucket-count" id="bucket-61-90-count">0 счета</div>
+                                    <div class="bucket-percentage" id="bucket-61-90-percentage">0%</div>
                                 </div>
                                 <div class="aging-bucket-new bucket-red">
                                     <div class="bucket-header">
                                         <h4>90+ дней</h4>
                                     </div>
-                                    <div class="bucket-amount" style="color: #FF8C00;">28,000 ₽</div>
-                                    <div class="bucket-count">2 счета</div>
-                                    <div class="bucket-percentage">8.8%</div>
+                                    <div class="bucket-amount" style="color: #FF8C00;" id="bucket-90-plus-amount">0 ₽</div>
+                                    <div class="bucket-count" id="bucket-90-plus-count">0 счета</div>
+                                    <div class="bucket-percentage" id="bucket-90-plus-percentage">0%</div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Top Debtors Table -->
                         <div class="top-debtors-section-new">
                             <div class="section-header">
                                 <h3>Топ должники</h3>
                                 <p class="section-subtitle">Клиенты с наибольшей задолженностью</p>
                             </div>
-                            <div class="top-debtors-table-new">
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th style="cursor: pointer;" onclick="sortTopDebtorsTableNew('client')">КЛИЕНТ ↕</th>
-                                            <th style="cursor: pointer;" onclick="sortTopDebtorsTableNew('amount')">СУММА ЗАДОЛЖЕННОСТИ ↕</th>
-                                            <th style="cursor: pointer;" onclick="sortTopDebtorsTableNew('days_overdue')">ДНЕЙ ПРОСРОЧКИ ↕</th>
-                                            <th>СТАТУС</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr onclick="showDebtorDetailsNew('ORDO')" style="cursor: pointer;">
-                                            <td><strong>ORDO</strong></td>
-                                            <td style="text-align: right;">167 250 ₽</td>
-                                            <td>15 дн.</td>
-                                            <td><span class="status-btn status-working">В работе</span></td>
-                                        </tr>
-                                        <tr onclick="showDebtorDetailsNew('New White Smile')" style="cursor: pointer;">
-                                            <td><strong>New White Smile</strong></td>
-                                            <td style="text-align: right;">42 000 ₽</td>
-                                            <td>45 дн.</td>
-                                            <td><span class="status-btn status-invoice-critical">Выставить счет</span></td>
-                                        </tr>
-                                        <tr onclick="showDebtorDetailsNew('НЕТЛЕТ | SEO')" style="cursor: pointer;">
-                                            <td><strong>НЕТЛЕТ | SEO</strong></td>
-                                            <td style="text-align: right;">32 000 ₽</td>
-                                            <td>3 дн.</td>
-                                            <td><span class="status-btn status-month-end">Конец месяца</span></td>
-                                        </tr>
-                                        <tr onclick="showDebtorDetailsNew('SQ Clinic')" style="cursor: pointer;">
-                                            <td><strong>SQ Clinic</strong></td>
-                                            <td style="text-align: right;">28 500 ₽</td>
-                                            <td>12 дн.</td>
-                                            <td><span class="status-btn status-month-end">Конец месяца</span></td>
-                                        </tr>
-                                        <tr onclick="showDebtorDetailsNew('GSK')" style="cursor: pointer;">
-                                            <td><strong>GSK</strong></td>
-                                            <td style="text-align: right;">25 000 ₽</td>
-                                            <td>7 дн.</td>
-                                            <td><span class="status-btn status-month-end">Конец месяца</span></td>
-                                        </tr>
-                                        <tr onclick="showDebtorDetailsNew('Global Catering')" style="cursor: pointer;">
-                                            <td><strong>Global Catering</strong></td>
-                                            <td style="text-align: right;">14 500 ₽</td>
-                                            <td>2 дн.</td>
-                                            <td><span class="status-btn status-invoice">Выставить счет</span></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div id="topDebtorsTableFinance" class="top-debtors-table-new"></div>
+                        </div>
+
+                        <div class="top-debtors-section-new">
+                            <div class="section-header">
+                                <h3>Таймлайн неоплаченных счетов</h3>
+                                <p class="section-subtitle">Все неоплаченные счета с датами и сроками</p>
                             </div>
+                            <div id="invoiceTimelineTableFinance" class="top-debtors-table-new"></div>
                         </div>
                     </div>
                 </div>
@@ -584,6 +544,24 @@
                     <div class="payments-history-section">
                         <div class="history-controls">
                             <h3>Акты</h3>
+                            <div class="history-period-controls" style="display:flex; gap:12px; flex-wrap:wrap;">
+                                <div class="period-selector">
+                                    <label for="actsDateFrom">От:</label>
+                                    <input type="date" id="actsDateFrom" class="period-select">
+                                </div>
+                                <div class="period-selector">
+                                    <label for="actsDateTo">До:</label>
+                                    <input type="date" id="actsDateTo" class="period-select">
+                                </div>
+                                <div class="period-selector">
+                                    <label for="actsClientSearch">Клиент:</label>
+                                    <input type="text" id="actsClientSearch" class="period-select" placeholder="Поиск по клиенту">
+                                </div>
+                                <div class="period-selector" style="display:flex; align-items:flex-end; gap:8px;">
+                                    <button type="button" class="btn btn--primary" id="actsApplyBtn">Применить</button>
+                                    <button type="button" class="btn btn--secondary" id="actsResetBtn">Сброс</button>
+                                </div>
+                            </div>
                         </div>
                         <div id="financeActsTable"></div>
                     </div>

@@ -7947,3 +7947,424 @@ window.initMobileResponsive = initMobileResponsive;
 function removeAddClientButtons() {
     // заглушка, чтобы не было ошибки ReferenceError
 }
+
+const financeSprint2State = {
+  payments: [],
+  receivables: {
+    top_debtors: [],
+    invoice_timeline: []
+  },
+  acts: [],
+  paymentsSortOrder: { field: null, direction: 'asc' },
+  topDebtorsSortOrder: { field: null, direction: 'asc' },
+  invoiceTimelineSortOrder: { field: null, direction: 'asc' },
+  historyBindDone: false,
+  receivablesBindDone: false,
+  actsBindDone: false
+};
+
+async function fetchFinanceJson(url) {
+  const resp = await fetch(url, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: {
+      'Accept': 'application/json',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache'
+    }
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
+  }
+  return resp.json();
+}
+
+function initPaymentsHistory() {
+  if (!financeSprint2State.historyBindDone) {
+    financeSprint2State.historyBindDone = true;
+    document.getElementById('historyApplyBtn')?.addEventListener('click', () => {
+      loadPaymentsHistoryFromApi();
+    });
+    document.getElementById('historyResetBtn')?.addEventListener('click', () => {
+      const from = document.getElementById('historyDateFrom');
+      const to = document.getElementById('historyDateTo');
+      const client = document.getElementById('historyClientSearch');
+      if (from) from.value = '';
+      if (to) to.value = '';
+      if (client) client.value = '';
+      loadPaymentsHistoryFromApi();
+    });
+  }
+  loadPaymentsHistoryFromApi();
+}
+
+async function loadPaymentsHistoryFromApi() {
+  try {
+    showLoadingIndicator();
+    const params = new URLSearchParams();
+    const from = document.getElementById('historyDateFrom')?.value || '';
+    const to = document.getElementById('historyDateTo')?.value || '';
+    const client = document.getElementById('historyClientSearch')?.value?.trim() || '';
+    if (from) params.set('date_from', from);
+    if (to) params.set('date_to', to);
+    if (client) params.set('client', client);
+    params.set('_', String(Date.now()));
+    const result = await fetchFinanceJson(`/api.php/finance/payments-history?${params.toString()}`);
+    const rows = Array.isArray(result?.data?.items) ? result.data.items : [];
+    const summary = result?.data?.summary || {};
+    financeSprint2State.payments = rows;
+    const countElement = document.getElementById('paymentCount');
+    const totalElement = document.getElementById('paymentTotal');
+    const averageElement = document.getElementById('averagePayment');
+    if (countElement) countElement.textContent = String(Number(summary.count || rows.length));
+    if (totalElement) totalElement.textContent = formatCurrency(Number(summary.total || 0));
+    if (averageElement) averageElement.textContent = formatCurrency(Math.round(Number(summary.average || 0)));
+    renderPaymentsHistoryTable(rows);
+  } catch (err) {
+    console.error('loadPaymentsHistoryFromApi failed', err);
+    showToast('Не удалось загрузить историю оплат', 'error');
+    renderPaymentsHistoryTable([]);
+  } finally {
+    hideLoadingIndicator();
+  }
+}
+
+function renderPaymentsHistoryTable(data) {
+  const container = document.getElementById('paymentsHistoryTable');
+  if (!container) return;
+  if (!Array.isArray(data) || data.length === 0) {
+    container.innerHTML = '<div class="no-data">Нет оплаченных счетов за выбранный период</div>';
+    return;
+  }
+  container.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="cursor: pointer;" onclick="sortPaymentsTable('paid_date')">Дата ↕</th>
+          <th style="cursor: pointer;" onclick="sortPaymentsTable('client_name')">Клиент ↕</th>
+          <th style="cursor: pointer;" onclick="sortPaymentsTable('amount')">Сумма ↕</th>
+          <th>Подробнее</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${data.map((payment) => `
+          <tr>
+            <td>${payment.paid_date ? new Date(payment.paid_date).toLocaleDateString('ru-RU') : '—'}</td>
+            <td>${escapeHtml(payment.client_name || '—')}</td>
+            <td style="text-align:right;">${formatCurrency(Number(payment.amount || 0))}</td>
+            <td>${payment.invoice_download_url ? `<a href="${escapeHtml(payment.invoice_download_url)}" target="_blank" rel="noopener">PDF</a>` : '—'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function sortPaymentsTable(field) {
+  const rows = [...financeSprint2State.payments];
+  if (financeSprint2State.paymentsSortOrder.field === field) {
+    financeSprint2State.paymentsSortOrder.direction = financeSprint2State.paymentsSortOrder.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    financeSprint2State.paymentsSortOrder.field = field;
+    financeSprint2State.paymentsSortOrder.direction = 'asc';
+  }
+  rows.sort((a, b) => {
+    let aVal = a[field];
+    let bVal = b[field];
+    if (field === 'paid_date') {
+      aVal = aVal ? new Date(aVal).getTime() : 0;
+      bVal = bVal ? new Date(bVal).getTime() : 0;
+    }
+    if (field === 'client_name') {
+      aVal = String(aVal || '').toLowerCase();
+      bVal = String(bVal || '').toLowerCase();
+    }
+    if (aVal < bVal) return financeSprint2State.paymentsSortOrder.direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return financeSprint2State.paymentsSortOrder.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+  renderPaymentsHistoryTable(rows);
+}
+
+function applyCustomDateRange() {
+  loadPaymentsHistoryFromApi();
+}
+
+function initReceivablesSubcategory() {
+  if (!financeSprint2State.receivablesBindDone) {
+    financeSprint2State.receivablesBindDone = true;
+    document.getElementById('receivablesApplyBtn')?.addEventListener('click', () => {
+      loadReceivablesFromApi();
+    });
+    document.getElementById('receivablesResetBtn')?.addEventListener('click', () => {
+      const from = document.getElementById('receivablesDateFrom');
+      const to = document.getElementById('receivablesDateTo');
+      const client = document.getElementById('receivablesClientSearch');
+      if (from) from.value = '';
+      if (to) to.value = '';
+      if (client) client.value = '';
+      loadReceivablesFromApi();
+    });
+  }
+  loadReceivablesFromApi();
+}
+
+async function loadReceivablesFromApi() {
+  try {
+    const params = new URLSearchParams();
+    const from = document.getElementById('receivablesDateFrom')?.value || '';
+    const to = document.getElementById('receivablesDateTo')?.value || '';
+    const client = document.getElementById('receivablesClientSearch')?.value?.trim() || '';
+    if (from) params.set('date_from', from);
+    if (to) params.set('date_to', to);
+    if (client) params.set('client', client);
+    params.set('_', String(Date.now()));
+    const result = await fetchFinanceJson(`/api.php/finance/receivables?${params.toString()}`);
+    const data = result?.data || {};
+    financeSprint2State.receivables = {
+      top_debtors: Array.isArray(data.top_debtors) ? data.top_debtors : [],
+      invoice_timeline: Array.isArray(data.invoice_timeline) ? data.invoice_timeline : []
+    };
+    renderReceivablesOverviewFromApi(data.summary_metrics || {});
+    renderAgingBucketsGridFromApi(data.aging_buckets || {});
+    renderTopDebtorsTableFinance();
+    renderInvoiceTimelineTableFinance();
+  } catch (err) {
+    console.error('loadReceivablesFromApi failed', err);
+    showToast('Не удалось загрузить задолженности', 'error');
+  }
+}
+
+function renderReceivablesOverviewFromApi(summary) {
+  const totalEl = document.getElementById('totalReceivablesFinance');
+  const invoicesEl = document.getElementById('totalInvoicesFinance');
+  const overdue90El = document.getElementById('overdue90PlusFinance');
+  const avgEl = document.getElementById('avgCollectionTime');
+  if (totalEl) totalEl.textContent = formatCurrency(Number(summary.total_receivables || 0));
+  if (invoicesEl) invoicesEl.textContent = String(Number(summary.total_invoices || 0));
+  if (overdue90El) overdue90El.textContent = formatCurrency(Number(summary.overdue_90_plus || 0));
+  if (avgEl) avgEl.textContent = `${Number(summary.average_collection_time || 0)} дней`;
+}
+
+function renderAgingBucketsGridFromApi(buckets) {
+  const total = ['0_30_days', '31_60_days', '61_90_days', '90_plus_days']
+    .reduce((sum, key) => sum + Number(buckets?.[key]?.amount || 0), 0);
+  const setBucket = (prefix, key) => {
+    const amount = Number(buckets?.[key]?.amount || 0);
+    const count = Number(buckets?.[key]?.count || 0);
+    const perc = total > 0 ? ((amount / total) * 100) : 0;
+    const amountEl = document.getElementById(`${prefix}-amount`);
+    const countEl = document.getElementById(`${prefix}-count`);
+    const percEl = document.getElementById(`${prefix}-percentage`);
+    if (amountEl) amountEl.textContent = formatCurrency(amount);
+    if (countEl) countEl.textContent = `${count} счетов`;
+    if (percEl) percEl.textContent = `${perc.toFixed(1)}%`;
+  };
+  setBucket('bucket-0-30', '0_30_days');
+  setBucket('bucket-31-60', '31_60_days');
+  setBucket('bucket-61-90', '61_90_days');
+  setBucket('bucket-90-plus', '90_plus_days');
+}
+
+function renderTopDebtorsTableFinance() {
+  const container = document.getElementById('topDebtorsTableFinance');
+  if (!container) return;
+  const debtors = Array.isArray(financeSprint2State.receivables.top_debtors) ? financeSprint2State.receivables.top_debtors : [];
+  if (debtors.length === 0) {
+    container.innerHTML = '<div class="no-data">Нет данных по должникам</div>';
+    return;
+  }
+  container.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="cursor: pointer;" onclick="sortTopDebtorsTable('client')">Клиент ↕</th>
+          <th style="cursor: pointer;" onclick="sortTopDebtorsTable('amount')">Сумма ↕</th>
+          <th style="cursor: pointer;" onclick="sortTopDebtorsTable('days_overdue')">Дней просрочки ↕</th>
+          <th>Статус</th>
+          <th>Приоритет</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${debtors.map((d) => `
+          <tr>
+            <td>${escapeHtml(d.client || '—')}</td>
+            <td style="text-align:right;">${formatCurrency(Number(d.amount || 0))}</td>
+            <td>${Number(d.days_overdue || 0)} дн.</td>
+            <td>${escapeHtml(d.status || '—')}</td>
+            <td>${escapeHtml(d.priority || '—')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderInvoiceTimelineTableFinance() {
+  const container = document.getElementById('invoiceTimelineTableFinance');
+  if (!container) return;
+  const invoices = Array.isArray(financeSprint2State.receivables.invoice_timeline) ? financeSprint2State.receivables.invoice_timeline : [];
+  if (invoices.length === 0) {
+    container.innerHTML = '<div class="no-data">Нет неоплаченных счетов</div>';
+    return;
+  }
+  container.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="cursor: pointer;" onclick="sortInvoiceTimelineTable('client')">Клиент ↕</th>
+          <th style="cursor: pointer;" onclick="sortInvoiceTimelineTable('amount')">Сумма ↕</th>
+          <th>Статус</th>
+          <th>Дней в статусе</th>
+          <th style="cursor: pointer;" onclick="sortInvoiceTimelineTable('days_to_due')">До срока ↕</th>
+          <th>Дата счета</th>
+          <th>Срок оплаты</th>
+          <th>PDF</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${invoices.map((inv) => `
+          <tr>
+            <td>${escapeHtml(inv.client || '—')}</td>
+            <td style="text-align:right;">${formatCurrency(Number(inv.amount || 0))}</td>
+            <td>${escapeHtml(inv.status || '—')}</td>
+            <td>${Number(inv.days_in_status || 0)} дн.</td>
+            <td>${Number(inv.days_to_due || 0)} дн.</td>
+            <td>${inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString('ru-RU') : '—'}</td>
+            <td>${inv.due_date ? new Date(inv.due_date).toLocaleDateString('ru-RU') : '—'}</td>
+            <td>${inv.invoice_download_url ? `<a href="${escapeHtml(inv.invoice_download_url)}" target="_blank" rel="noopener">PDF</a>` : '—'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function sortTopDebtorsTable(field) {
+  const rows = [...(financeSprint2State.receivables.top_debtors || [])];
+  if (financeSprint2State.topDebtorsSortOrder.field === field) {
+    financeSprint2State.topDebtorsSortOrder.direction = financeSprint2State.topDebtorsSortOrder.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    financeSprint2State.topDebtorsSortOrder.field = field;
+    financeSprint2State.topDebtorsSortOrder.direction = 'asc';
+  }
+  rows.sort((a, b) => {
+    let aVal = a[field];
+    let bVal = b[field];
+    if (field === 'client') {
+      aVal = String(aVal || '').toLowerCase();
+      bVal = String(bVal || '').toLowerCase();
+    }
+    if (aVal < bVal) return financeSprint2State.topDebtorsSortOrder.direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return financeSprint2State.topDebtorsSortOrder.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+  financeSprint2State.receivables.top_debtors = rows;
+  renderTopDebtorsTableFinance();
+}
+
+function sortInvoiceTimelineTable(field) {
+  const rows = [...(financeSprint2State.receivables.invoice_timeline || [])];
+  if (financeSprint2State.invoiceTimelineSortOrder.field === field) {
+    financeSprint2State.invoiceTimelineSortOrder.direction = financeSprint2State.invoiceTimelineSortOrder.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    financeSprint2State.invoiceTimelineSortOrder.field = field;
+    financeSprint2State.invoiceTimelineSortOrder.direction = 'asc';
+  }
+  rows.sort((a, b) => {
+    let aVal = a[field];
+    let bVal = b[field];
+    if (field === 'client') {
+      aVal = String(aVal || '').toLowerCase();
+      bVal = String(bVal || '').toLowerCase();
+    }
+    if (aVal < bVal) return financeSprint2State.invoiceTimelineSortOrder.direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return financeSprint2State.invoiceTimelineSortOrder.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+  financeSprint2State.receivables.invoice_timeline = rows;
+  renderInvoiceTimelineTableFinance();
+}
+
+function initActsSubcategory() {
+  if (!financeSprint2State.actsBindDone) {
+    financeSprint2State.actsBindDone = true;
+    document.getElementById('actsApplyBtn')?.addEventListener('click', () => loadActsFromApi());
+    document.getElementById('actsResetBtn')?.addEventListener('click', () => {
+      const from = document.getElementById('actsDateFrom');
+      const to = document.getElementById('actsDateTo');
+      const client = document.getElementById('actsClientSearch');
+      if (from) from.value = '';
+      if (to) to.value = '';
+      if (client) client.value = '';
+      loadActsFromApi();
+    });
+  }
+  loadActsFromApi();
+}
+
+async function loadActsFromApi() {
+  const root = document.getElementById('financeActsTable');
+  if (root) {
+    root.innerHTML = '<div class="loading-indicator active">Загрузка данных...</div>';
+  }
+  try {
+    const params = new URLSearchParams();
+    const from = document.getElementById('actsDateFrom')?.value || '';
+    const to = document.getElementById('actsDateTo')?.value || '';
+    const client = document.getElementById('actsClientSearch')?.value?.trim() || '';
+    if (from) params.set('date_from', from);
+    if (to) params.set('date_to', to);
+    if (client) params.set('client', client);
+    params.set('_', String(Date.now()));
+    const result = await fetchFinanceJson(`/api.php/finance/acts?${params.toString()}`);
+    const items = Array.isArray(result?.data?.items) ? result.data.items : [];
+    financeSprint2State.acts = items;
+    renderActsTableFromApi(items);
+  } catch (err) {
+    console.error('loadActsFromApi failed', err);
+    if (root) root.innerHTML = '<div class="no-data">Не удалось загрузить акты</div>';
+  }
+}
+
+function renderActsTableFromApi(items) {
+  const root = document.getElementById('financeActsTable');
+  if (!root) return;
+  if (!Array.isArray(items) || items.length === 0) {
+    root.innerHTML = '<div class="no-data">Нет актов за выбранный период</div>';
+    return;
+  }
+  root.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Период</th>
+          <th>Дата</th>
+          <th>Клиент</th>
+          <th>Акт PDF</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((a) => `
+          <tr>
+            <td>${escapeHtml(a.period_label || '—')}</td>
+            <td>${a.doc_date ? new Date(a.doc_date).toLocaleDateString('ru-RU') : '—'}</td>
+            <td>${escapeHtml(a.client_name || '—')}</td>
+            <td>${a.act_download_url ? `<a href="${escapeHtml(a.act_download_url)}" target="_blank" rel="noopener">PDF</a>` : '—'}</td>
+            <td>${escapeHtml(a.status || '—')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+window.sortPaymentsTable = sortPaymentsTable;
+window.sortTopDebtorsTable = sortTopDebtorsTable;
+window.sortInvoiceTimelineTable = sortInvoiceTimelineTable;
+window.applyCustomDateRange = applyCustomDateRange;
+window.initPaymentsHistory = initPaymentsHistory;
+window.initReceivablesSubcategory = initReceivablesSubcategory;
+window.initActsSubcategory = initActsSubcategory;

@@ -288,6 +288,33 @@ if ($resource === 'auth') {
         }
     }
 
+    // /api.php/finance/payments-history
+    if ($param1 === 'payments-history' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->paymentsHistory();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/finance/receivables
+    if ($param1 === 'receivables' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->receivables();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
+    // /api.php/finance/acts
+    if ($param1 === 'acts' && $param2 === null) {
+        if ($method === 'GET') {
+            $controller->actsIndex();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
     // /api.php/finance/projects
     if ($param1 === 'projects' && $param2 === null) {
         if ($method === 'GET') {

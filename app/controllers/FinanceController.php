@@ -12,6 +12,7 @@ class FinanceController
     private $events;
     private $plans;
     private $projects;
+    private $financeDocColumns = null;
 
     public function __construct(mysqli $db)
     {
@@ -294,6 +295,385 @@ class FinanceController
                 ]
             ]
         ]);
+    }
+
+    public function paymentsHistory()
+    {
+        Auth::requireAuth();
+
+        $dateFrom = isset($_GET['date_from']) ? trim((string)$_GET['date_from']) : '';
+        $dateTo = isset($_GET['date_to']) ? trim((string)$_GET['date_to']) : '';
+        $clientSearch = isset($_GET['client']) ? trim((string)$_GET['client']) : '';
+
+        if ($dateFrom !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $dateFrom = '';
+        }
+        if ($dateTo !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $dateTo = '';
+        }
+
+        $hasIsPaid = $this->hasFinanceDocColumn('is_paid');
+        $hasPaidStatus = $this->hasFinanceDocColumn('paid_status');
+        $paidDateExpr = $this->hasFinanceDocColumn('paid_at')
+            ? "COALESCE(d.paid_at, d.updated_at, CONCAT(d.doc_date, ' 00:00:00'))"
+            : "COALESCE(d.updated_at, CONCAT(d.doc_date, ' 00:00:00'))";
+
+        $where = ["d.doc_type = 'invoice'"];
+        if ($hasIsPaid && $hasPaidStatus) {
+            $where[] = "(COALESCE(d.is_paid, 0) = 1 OR d.paid_status = 'paid')";
+        } elseif ($hasIsPaid) {
+            $where[] = "COALESCE(d.is_paid, 0) = 1";
+        } elseif ($hasPaidStatus) {
+            $where[] = "d.paid_status = 'paid'";
+        } else {
+            $where[] = "1 = 0";
+        }
+
+        $types = '';
+        $params = [];
+        if ($dateFrom !== '') {
+            $where[] = "DATE($paidDateExpr) >= ?";
+            $types .= 's';
+            $params[] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $where[] = "DATE($paidDateExpr) <= ?";
+            $types .= 's';
+            $params[] = $dateTo;
+        }
+        if ($clientSearch !== '') {
+            $where[] = "c.name LIKE ?";
+            $types .= 's';
+            $params[] = '%' . $clientSearch . '%';
+        }
+
+        $sql = "SELECT d.id, d.client_id, c.name AS client_name, d.total_sum, d.paid_sum, d.doc_number, d.download_token,
+                       $paidDateExpr AS paid_date
+                FROM finance_documents d
+                INNER JOIN clients c ON c.id = d.client_id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY paid_date DESC, d.id DESC
+                LIMIT 1000";
+
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            sendError('DB_ERROR', 'Не удалось получить историю оплат', 500);
+        }
+        $this->bindStmtParams($stmt, $types, $params);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $rows = [];
+        $total = 0.0;
+        while ($res && ($row = $res->fetch_assoc())) {
+            $amount = (float)($row['paid_sum'] ?? 0);
+            if ($amount <= 0) {
+                $amount = (float)($row['total_sum'] ?? 0);
+            }
+            $rows[] = [
+                'id' => (int)($row['id'] ?? 0),
+                'client_id' => (int)($row['client_id'] ?? 0),
+                'client_name' => (string)($row['client_name'] ?? '—'),
+                'amount' => $amount,
+                'paid_date' => (string)($row['paid_date'] ?? ''),
+                'doc_number' => (string)($row['doc_number'] ?? ''),
+                'invoice_download_url' => !empty($row['download_token'])
+                    ? '/api.php/finance/download?token=' . rawurlencode((string)$row['download_token'])
+                    : null,
+            ];
+            $total += $amount;
+        }
+        $stmt->close();
+
+        $count = count($rows);
+        $avg = $count > 0 ? ($total / $count) : 0.0;
+
+        sendJson([
+            'data' => [
+                'items' => $rows,
+                'summary' => [
+                    'count' => $count,
+                    'total' => $total,
+                    'average' => $avg,
+                ],
+            ],
+        ]);
+    }
+
+    public function receivables()
+    {
+        Auth::requireAuth();
+
+        $dateFrom = isset($_GET['date_from']) ? trim((string)$_GET['date_from']) : '';
+        $dateTo = isset($_GET['date_to']) ? trim((string)$_GET['date_to']) : '';
+        $clientSearch = isset($_GET['client']) ? trim((string)$_GET['client']) : '';
+        if ($dateFrom !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $dateFrom = '';
+        }
+        if ($dateTo !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $dateTo = '';
+        }
+
+        $hasIsPaid = $this->hasFinanceDocColumn('is_paid');
+        $hasPaidStatus = $this->hasFinanceDocColumn('paid_status');
+        $invoiceDateExpr = "COALESCE(d.doc_date, DATE(d.created_at))";
+        $dueDateExpr = "COALESCE(d.due_date, d.doc_date)";
+        $daysPastDueExpr = "GREATEST(DATEDIFF(CURDATE(), $dueDateExpr), 0)";
+        $daysToDueExpr = "DATEDIFF($dueDateExpr, CURDATE())";
+        $daysInStatusExpr = "DATEDIFF(CURDATE(), $invoiceDateExpr)";
+
+        $where = ["d.doc_type = 'invoice'"];
+        if ($hasIsPaid && $hasPaidStatus) {
+            $where[] = "NOT (COALESCE(d.is_paid, 0) = 1 OR d.paid_status = 'paid')";
+        } elseif ($hasIsPaid) {
+            $where[] = "COALESCE(d.is_paid, 0) = 0";
+        } elseif ($hasPaidStatus) {
+            $where[] = "(d.paid_status IS NULL OR d.paid_status <> 'paid')";
+        }
+
+        $types = '';
+        $params = [];
+        if ($dateFrom !== '') {
+            $where[] = "DATE($invoiceDateExpr) >= ?";
+            $types .= 's';
+            $params[] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $where[] = "DATE($invoiceDateExpr) <= ?";
+            $types .= 's';
+            $params[] = $dateTo;
+        }
+        if ($clientSearch !== '') {
+            $where[] = "c.name LIKE ?";
+            $types .= 's';
+            $params[] = '%' . $clientSearch . '%';
+        }
+
+        $sql = "SELECT d.id, d.client_id, c.name AS client_name, d.total_sum, d.doc_number, d.download_token,
+                       $invoiceDateExpr AS invoice_date, $dueDateExpr AS due_date,
+                       $daysPastDueExpr AS days_overdue, $daysToDueExpr AS days_to_due, $daysInStatusExpr AS days_in_status
+                FROM finance_documents d
+                INNER JOIN clients c ON c.id = d.client_id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY invoice_date DESC, d.id DESC
+                LIMIT 2000";
+
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            sendError('DB_ERROR', 'Не удалось получить задолженности', 500);
+        }
+        $this->bindStmtParams($stmt, $types, $params);
+        $stmt->execute();
+        $res = $stmt->get_result();
+
+        $overdueDays = $this->getOverdueDaysSetting();
+        $timeline = [];
+        $total = 0.0;
+        $invoicesCount = 0;
+        $overdue90Plus = 0.0;
+        $overdueDaysTotal = 0;
+        $overdueCount = 0;
+        $buckets = [
+            '0_30_days' => ['amount' => 0.0, 'count' => 0],
+            '31_60_days' => ['amount' => 0.0, 'count' => 0],
+            '61_90_days' => ['amount' => 0.0, 'count' => 0],
+            '90_plus_days' => ['amount' => 0.0, 'count' => 0],
+        ];
+        $debtorsMap = [];
+
+        while ($res && ($row = $res->fetch_assoc())) {
+            $amount = (float)($row['total_sum'] ?? 0);
+            $daysOverdue = max(0, (int)($row['days_overdue'] ?? 0));
+            $daysToDue = (int)($row['days_to_due'] ?? 0);
+            $daysInStatus = max(0, (int)($row['days_in_status'] ?? 0));
+            $isOverdue = $daysOverdue > $overdueDays;
+
+            $timeline[] = [
+                'id' => (int)($row['id'] ?? 0),
+                'client_id' => (int)($row['client_id'] ?? 0),
+                'client' => (string)($row['client_name'] ?? '—'),
+                'amount' => $amount,
+                'status' => $isOverdue ? 'Просрочен' : 'Не оплачен',
+                'days_in_status' => $daysInStatus,
+                'days_to_due' => $daysToDue,
+                'days_overdue' => $daysOverdue,
+                'invoice_date' => (string)($row['invoice_date'] ?? ''),
+                'due_date' => (string)($row['due_date'] ?? ''),
+                'overdue' => $isOverdue,
+                'doc_number' => (string)($row['doc_number'] ?? ''),
+                'invoice_download_url' => !empty($row['download_token'])
+                    ? '/api.php/finance/download?token=' . rawurlencode((string)$row['download_token'])
+                    : null,
+            ];
+
+            $total += $amount;
+            $invoicesCount++;
+            if ($daysOverdue > 0) {
+                $overdueDaysTotal += $daysOverdue;
+                $overdueCount++;
+            }
+            if ($daysOverdue > 90) {
+                $overdue90Plus += $amount;
+            }
+
+            if ($daysOverdue <= 30) {
+                $buckets['0_30_days']['amount'] += $amount;
+                $buckets['0_30_days']['count']++;
+            } elseif ($daysOverdue <= 60) {
+                $buckets['31_60_days']['amount'] += $amount;
+                $buckets['31_60_days']['count']++;
+            } elseif ($daysOverdue <= 90) {
+                $buckets['61_90_days']['amount'] += $amount;
+                $buckets['61_90_days']['count']++;
+            } else {
+                $buckets['90_plus_days']['amount'] += $amount;
+                $buckets['90_plus_days']['count']++;
+            }
+
+            $cid = (int)($row['client_id'] ?? 0);
+            if (!isset($debtorsMap[$cid])) {
+                $debtorsMap[$cid] = [
+                    'client_id' => $cid,
+                    'client' => (string)($row['client_name'] ?? '—'),
+                    'amount' => 0.0,
+                    'days_overdue' => 0,
+                    'invoices_count' => 0,
+                ];
+            }
+            $debtorsMap[$cid]['amount'] += $amount;
+            $debtorsMap[$cid]['days_overdue'] = max($debtorsMap[$cid]['days_overdue'], $daysOverdue);
+            $debtorsMap[$cid]['invoices_count']++;
+        }
+        $stmt->close();
+
+        $topDebtors = array_values($debtorsMap);
+        foreach ($topDebtors as &$debtor) {
+            $d = (int)$debtor['days_overdue'];
+            if ($d > 90 || (float)$debtor['amount'] >= 150000) {
+                $debtor['priority'] = 'Критический';
+            } elseif ($d > 60 || (float)$debtor['amount'] >= 80000) {
+                $debtor['priority'] = 'Высокий';
+            } elseif ($d > $overdueDays) {
+                $debtor['priority'] = 'Средний';
+            } else {
+                $debtor['priority'] = 'Низкий';
+            }
+            $debtor['status'] = $d > $overdueDays ? 'Просрочен' : 'Не оплачен';
+        }
+        unset($debtor);
+
+        usort($topDebtors, function ($a, $b) {
+            $cmpAmount = (float)$b['amount'] <=> (float)$a['amount'];
+            if ($cmpAmount !== 0) return $cmpAmount;
+            return (int)$b['days_overdue'] <=> (int)$a['days_overdue'];
+        });
+        if (count($topDebtors) > 20) {
+            $topDebtors = array_slice($topDebtors, 0, 20);
+        }
+
+        $timelineSorted = $timeline;
+        usort($timelineSorted, function ($a, $b) {
+            $aTs = !empty($a['invoice_date']) ? strtotime((string)$a['invoice_date']) : 0;
+            $bTs = !empty($b['invoice_date']) ? strtotime((string)$b['invoice_date']) : 0;
+            if ($aTs === $bTs) {
+                return (int)$b['id'] <=> (int)$a['id'];
+            }
+            return $bTs <=> $aTs;
+        });
+
+        $avgCollection = $overdueCount > 0 ? (int)round($overdueDaysTotal / $overdueCount) : 0;
+        $efficiency = $invoicesCount > 0
+            ? (float)round((($invoicesCount - $overdueCount) / $invoicesCount) * 100, 1)
+            : 0.0;
+
+        sendJson([
+            'data' => [
+                'summary_metrics' => [
+                    'total_receivables' => $total,
+                    'total_invoices' => $invoicesCount,
+                    'overdue_90_plus' => $overdue90Plus,
+                    'average_collection_time' => $avgCollection,
+                    'collection_efficiency' => $efficiency,
+                ],
+                'aging_buckets' => $buckets,
+                'top_debtors' => $topDebtors,
+                'invoice_timeline' => $timelineSorted,
+                'meta' => [
+                    'overdue_days' => $overdueDays,
+                ],
+            ],
+        ]);
+    }
+
+    public function actsIndex()
+    {
+        Auth::requireAuth();
+
+        $dateFrom = isset($_GET['date_from']) ? trim((string)$_GET['date_from']) : '';
+        $dateTo = isset($_GET['date_to']) ? trim((string)$_GET['date_to']) : '';
+        $clientSearch = isset($_GET['client']) ? trim((string)$_GET['client']) : '';
+        if ($dateFrom !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $dateFrom = '';
+        }
+        if ($dateTo !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $dateTo = '';
+        }
+
+        $where = ["d.doc_type = 'act'"];
+        $types = '';
+        $params = [];
+        if ($dateFrom !== '') {
+            $where[] = "d.doc_date >= ?";
+            $types .= 's';
+            $params[] = $dateFrom;
+        }
+        if ($dateTo !== '') {
+            $where[] = "d.doc_date <= ?";
+            $types .= 's';
+            $params[] = $dateTo;
+        }
+        if ($clientSearch !== '') {
+            $where[] = "c.name LIKE ?";
+            $types .= 's';
+            $params[] = '%' . $clientSearch . '%';
+        }
+
+        $sql = "SELECT d.id, d.client_id, c.name AS client_name, d.period_year, d.period_month, d.doc_date,
+                       d.download_token, d.doc_number,
+                       EXISTS (
+                           SELECT 1 FROM finance_send_events ev
+                           WHERE ev.document_id = d.id AND ev.status = 'success'
+                       ) AS has_success_send
+                FROM finance_documents d
+                INNER JOIN clients c ON c.id = d.client_id
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY d.doc_date DESC, d.id DESC
+                LIMIT 1000";
+
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            sendError('DB_ERROR', 'Не удалось получить акты', 500);
+        }
+        $this->bindStmtParams($stmt, $types, $params);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $rows = [];
+        while ($res && ($row = $res->fetch_assoc())) {
+            $rows[] = [
+                'id' => (int)($row['id'] ?? 0),
+                'client_id' => (int)($row['client_id'] ?? 0),
+                'client_name' => (string)($row['client_name'] ?? '—'),
+                'period_label' => sprintf('%02d.%04d', (int)($row['period_month'] ?? 0), (int)($row['period_year'] ?? 0)),
+                'doc_date' => (string)($row['doc_date'] ?? ''),
+                'doc_number' => (string)($row['doc_number'] ?? ''),
+                'status' => ((int)($row['has_success_send'] ?? 0) === 1) ? 'Отправлен' : 'Создан',
+                'act_download_url' => !empty($row['download_token'])
+                    ? '/api.php/finance/download?token=' . rawurlencode((string)$row['download_token'])
+                    : null,
+            ];
+        }
+        $stmt->close();
+
+        sendJson(['data' => ['items' => $rows]]);
     }
 
     public function invoicePlansCreate()
@@ -869,6 +1249,38 @@ endobj
 ";
 
         return $pdf;
+    }
+
+    private function hasFinanceDocColumn($name)
+    {
+        $name = (string)$name;
+        if ($name === '') {
+            return false;
+        }
+        if ($this->financeDocColumns === null) {
+            $this->financeDocColumns = [];
+            $res = $this->db->query('SHOW COLUMNS FROM finance_documents');
+            if ($res) {
+                while ($row = $res->fetch_assoc()) {
+                    $this->financeDocColumns[(string)$row['Field']] = true;
+                }
+                $res->close();
+            }
+        }
+        return isset($this->financeDocColumns[$name]);
+    }
+
+    private function bindStmtParams(mysqli_stmt $stmt, $types, array $params)
+    {
+        if ($types === '' || empty($params)) {
+            return;
+        }
+        $refs = [];
+        $refs[] = &$types;
+        foreach ($params as $k => $value) {
+            $refs[] = &$params[$k];
+        }
+        call_user_func_array([$stmt, 'bind_param'], $refs);
     }
 
     private function getClientIp()
