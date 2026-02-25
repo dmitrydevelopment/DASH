@@ -15,6 +15,8 @@ class InvoicePlanModel
     {
         $sql = "SELECT ip.*, c.name AS client_name, c.email, c.chat_id, c.diadoc_box_id, c.send_invoice_telegram, c.send_invoice_diadoc,
                        c.send_invoice_schedule, c.invoice_use_end_month_date,
+                       fd_inv.doc_date AS invoice_doc_date,
+                       fd_inv.due_date AS invoice_due_date,
                        fd_inv.file_rel_path AS invoice_file_rel_path,
                        fd_inv.download_token AS invoice_download_token,
                        (
@@ -387,13 +389,14 @@ class InvoicePlanModel
         }
     }
 
-    public function insertFinanceDocument($plan, $docNumber, $token, $totalSum)
+    public function insertFinanceDocument($plan, $docNumber, $token, $totalSum, $dueDays = 7)
     {
         $periodYear = (int)$plan['period_year'];
         $periodMonth = (int)$plan['period_month'];
         $clientId = (int)$plan['client_id'];
         $docDate = date('Y-m-d');
-        $dueDate = date('Y-m-d', strtotime('+7 days'));
+        $dueDays = max(0, (int)$dueDays);
+        $dueDate = date('Y-m-d', strtotime('+' . $dueDays . ' days'));
         $filePath = 'storage/finance/invoices/' . date('Y/m') . '/invoice_plan_' . $plan['id'] . '.pdf';
 
         $stmt = $this->db->prepare("INSERT INTO finance_documents

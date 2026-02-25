@@ -112,7 +112,8 @@ class FinanceController
             $row['created_date'] = !empty($row['created_at']) ? date('d.m.Y', strtotime($row['created_at'])) : '—';
             $row['sent_date'] = !empty($row['sent_at']) ? date('d.m.Y', strtotime($row['sent_at'])) : '—';
             $row['payment_due_days'] = $paymentDueDays;
-            $row['days_since_sent'] = !empty($row['sent_at']) ? (int) floor((time() - strtotime($row['sent_at'])) / 86400) : 0;
+            $invoiceBaseDate = !empty($row['invoice_doc_date']) ? (string)$row['invoice_doc_date'] : (string)($row['sent_at'] ?? '');
+            $row['days_since_sent'] = $invoiceBaseDate !== '' ? (int) floor((time() - strtotime($invoiceBaseDate)) / 86400) : 0;
             $row['can_send_telegram'] = ((int)($row['send_invoice_telegram'] ?? 0) === 1) && !empty($row['chat_id']);
             $row['can_send_diadoc'] = ((int)($row['send_invoice_diadoc'] ?? 0) === 1);
 
@@ -195,7 +196,8 @@ class FinanceController
             $row['created_date'] = !empty($row['created_at']) ? date('d.m.Y', strtotime($row['created_at'])) : '—';
             $row['sent_date'] = !empty($row['sent_at']) ? date('d.m.Y', strtotime($row['sent_at'])) : '—';
             $row['payment_due_days'] = $paymentDueDays;
-            $row['days_since_sent'] = !empty($row['sent_at']) ? (int) floor((time() - strtotime($row['sent_at'])) / 86400) : 0;
+            $invoiceBaseDate = !empty($row['invoice_doc_date']) ? (string)$row['invoice_doc_date'] : (string)($row['sent_at'] ?? '');
+            $row['days_since_sent'] = $invoiceBaseDate !== '' ? (int) floor((time() - strtotime($invoiceBaseDate)) / 86400) : 0;
 
             if (($row['status'] ?? '') === 'planned'
                 && (int)($row['send_invoice_schedule'] ?? 0) === 1
@@ -519,9 +521,11 @@ class FinanceController
 
         $hasIsPaid = $this->hasFinanceDocColumn('is_paid');
         $hasPaidStatus = $this->hasFinanceDocColumn('paid_status');
+        $overdueDays = $this->getOverdueDaysSetting();
         $invoiceDateExpr = "COALESCE(d.doc_date, DATE(d.created_at))";
-        $dueDateExpr = "COALESCE(d.due_date, d.doc_date)";
-        $daysPastDueExpr = "GREATEST(DATEDIFF(CURDATE(), $dueDateExpr), 0)";
+        $daysSinceInvoiceExpr = "GREATEST(DATEDIFF(CURDATE(), $invoiceDateExpr), 0)";
+        $dueDateExpr = "DATE_ADD($invoiceDateExpr, INTERVAL " . (int)$overdueDays . " DAY)";
+        $daysPastDueExpr = "GREATEST(($daysSinceInvoiceExpr - " . (int)$overdueDays . "), 0)";
         $daysToDueExpr = "DATEDIFF($dueDateExpr, CURDATE())";
         $daysInStatusExpr = "DATEDIFF(CURDATE(), $invoiceDateExpr)";
 
@@ -551,6 +555,7 @@ class FinanceController
             $types .= 's';
             $params[] = '%' . $clientSearch . '%';
         }
+        $where[] = "($daysSinceInvoiceExpr > " . (int)$overdueDays . ")";
 
         $sql = "SELECT d.id, d.client_id, c.name AS client_name, d.total_sum, d.doc_number, d.download_token,
                        $invoiceDateExpr AS invoice_date, $dueDateExpr AS due_date,
@@ -569,7 +574,6 @@ class FinanceController
         $stmt->execute();
         $res = $stmt->get_result();
 
-        $overdueDays = $this->getOverdueDaysSetting();
         $timeline = [];
         $total = 0.0;
         $invoicesCount = 0;
@@ -589,7 +593,7 @@ class FinanceController
             $daysOverdue = max(0, (int)($row['days_overdue'] ?? 0));
             $daysToDue = (int)($row['days_to_due'] ?? 0);
             $daysInStatus = max(0, (int)($row['days_in_status'] ?? 0));
-            $isOverdue = $daysOverdue > $overdueDays;
+            $isOverdue = $daysOverdue > 0;
 
             $timeline[] = [
                 'id' => (int)($row['id'] ?? 0),
@@ -656,12 +660,12 @@ class FinanceController
                 $debtor['priority'] = 'Критический';
             } elseif ($d > 60 || (float)$debtor['amount'] >= 80000) {
                 $debtor['priority'] = 'Высокий';
-            } elseif ($d > $overdueDays) {
+            } elseif ($d > 0) {
                 $debtor['priority'] = 'Средний';
             } else {
                 $debtor['priority'] = 'Низкий';
             }
-            $debtor['status'] = $d > $overdueDays ? 'Просрочен' : 'Не оплачен';
+            $debtor['status'] = $d > 0 ? 'Просрочен' : 'Не оплачен';
         }
         unset($debtor);
 
@@ -971,7 +975,7 @@ class FinanceController
 
         $docNumber = 'INV-PLAN-' . date('Ymd') . '-' . $id;
         $token = hash('sha256', $docNumber . '|' . microtime(true));
-        $documentId = $this->plans->insertFinanceDocument($plan, $docNumber, $token, $total);
+        $documentId = $this->plans->insertFinanceDocument($plan, $docNumber, $token, $total, $this->getOverdueDaysSetting());
         if ($documentId <= 0) {
             if ($strict) {
                 sendError('DOCUMENT_CREATE_FAILED', 'Не удалось создать счет', 500);
@@ -1351,11 +1355,11 @@ class FinanceController
             $row = $res->fetch_assoc();
             $res->close();
             $v = isset($row['due_days']) ? (int)$row['due_days'] : 0;
-            if ($v > 0) {
+            if ($v >= 0) {
                 return $v;
             }
         }
-        return 7;
+        return 3;
     }
 
     private function buildPlanPayloadFromStoredData(array $plan, $sendNow)
