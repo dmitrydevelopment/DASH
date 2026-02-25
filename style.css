@@ -4568,6 +4568,18 @@ body {
   margin-top: var(--space-24);
 }
 
+.crm-notification-trigger-row {
+  grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1fr) auto;
+  gap: var(--space-12);
+  align-items: end;
+}
+
+.crm-notification-trigger-row .form-group--inline-checkboxes {
+  margin-top: 0;
+  white-space: nowrap;
+  justify-content: flex-end;
+}
+
 .inline-checkbox {
   display: inline-flex;
   align-items: center;

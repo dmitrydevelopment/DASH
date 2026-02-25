@@ -3427,7 +3427,7 @@ function resetNotificationTriggersUI() {
 
   list.innerHTML = `
     <div class="crm-notification-trigger-item" data-notification-trigger-row="1" data-fixed="1">
-      <div class="form-row">
+      <div class="form-row crm-notification-trigger-row">
         <div class="form-group">
           <input type="text" class="crmNotificationTriggerName" placeholder="Описание триггера" autocomplete="off">
         </div>
@@ -3458,7 +3458,7 @@ function addNotificationTriggerRow(name, eventCode, sendTelegram, sendEmail) {
   item.className = 'crm-notification-trigger-item';
   item.setAttribute('data-notification-trigger-row', '1');
   item.innerHTML = `
-    <div class="form-row">
+    <div class="form-row crm-notification-trigger-row">
       <div class="form-group">
         <input type="text" class="crmNotificationTriggerName" placeholder="Описание триггера" autocomplete="off">
       </div>
