@@ -159,11 +159,6 @@ function saveOperation(mysqli $db, array $op)
         return '';
     }
 
-    $operationId = isset($op['operationId']) ? (string) $op['operationId'] : '';
-    if ($operationId === '') {
-        return '';
-    }
-
     $direction = strtolower(trim((string)($op['operationType'] ?? $op['direction'] ?? $op['type'] ?? '')));
     if ($direction !== '') {
         $isIncome = (strpos($direction, 'credit') !== false || strpos($direction, 'income') !== false || strpos($direction, 'in') === 0 || strpos($direction, 'приход') !== false);
@@ -186,6 +181,7 @@ function saveOperation(mysqli $db, array $op)
     if ($operationTime === '') {
         $operationTime = isset($op['operationTime']) ? (string)$op['operationTime'] : date('Y-m-d H:i:s');
     }
+    $operationTime = normalizeDateTimeValue($operationTime);
 
     $currency = isset($op['currency']) ? (string) $op['currency'] : 'RUB';
 
@@ -193,6 +189,10 @@ function saveOperation(mysqli $db, array $op)
     $accountNumber = isset($op['accountNumber']) ? (string)$op['accountNumber'] : '';
     $counterpartyName = isset($op['counterpartyName']) ? (string)$op['counterpartyName'] : (isset($op['payerName']) ? (string)$op['payerName'] : '');
     $counterpartyInn = isset($op['counterpartyInn']) ? (string)$op['counterpartyInn'] : (isset($op['payerInn']) ? (string)$op['payerInn'] : '');
+    $operationId = resolveOperationId($op, $operationTime, $amount, $currency, $accountNumber, $description, $counterpartyName, $counterpartyInn);
+    if ($operationId === '') {
+        return '';
+    }
 
     $createdAt = date('Y-m-d H:i:s');
     $fields = ['operation_id', 'amount', 'currency', 'raw_json'];
@@ -376,6 +376,44 @@ function bindStmtDynamic(mysqli_stmt $stmt, $types, array $values)
         $refs[] = &$values[$k];
     }
     call_user_func_array([$stmt, 'bind_param'], $refs);
+}
+
+function normalizeDateTimeValue($raw)
+{
+    $raw = trim((string)$raw);
+    if ($raw === '') {
+        return date('Y-m-d H:i:s');
+    }
+    if (preg_match('/^\d{10}$/', $raw)) {
+        return date('Y-m-d H:i:s', (int)$raw);
+    }
+    if (preg_match('/^\d{13}$/', $raw)) {
+        return date('Y-m-d H:i:s', (int)floor(((float)$raw) / 1000));
+    }
+    $ts = strtotime($raw);
+    if ($ts !== false) {
+        return date('Y-m-d H:i:s', $ts);
+    }
+    return date('Y-m-d H:i:s');
+}
+
+function resolveOperationId(array $op, $opTime, $amount, $currency, $accountNumber, $description, $counterpartyName, $counterpartyInn)
+{
+    $operationId = trim((string)($op['operationId'] ?? $op['operation_id'] ?? $op['id'] ?? ''));
+    if ($operationId !== '') {
+        return substr($operationId, 0, 64);
+    }
+    $parts = [
+        'ext',
+        (string)$opTime,
+        number_format((float)$amount, 2, '.', ''),
+        strtoupper((string)$currency),
+        preg_replace('/\s+/u', ' ', trim((string)$accountNumber)),
+        preg_replace('/\s+/u', ' ', trim((string)$description)),
+        preg_replace('/\s+/u', ' ', trim((string)$counterpartyName)),
+        preg_replace('/\s+/u', ' ', trim((string)$counterpartyInn)),
+    ];
+    return 'ext_' . sha1(implode('|', $parts));
 }
 
 function columnExists(mysqli $db, $table, $column)

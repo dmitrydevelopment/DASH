@@ -1909,11 +1909,6 @@ endobj
 
     private function upsertBankOperation(array $op)
     {
-        $operationId = trim((string)($op['operationId'] ?? $op['operation_id'] ?? $op['id'] ?? ''));
-        if ($operationId === '') {
-            return '';
-        }
-
         $type = strtolower(trim((string)($op['operationType'] ?? $op['direction'] ?? $op['type'] ?? '')));
         $isIncome = true;
         if ($type !== '') {
@@ -1934,11 +1929,15 @@ endobj
 
         $currency = strtoupper(trim((string)($op['currency'] ?? ($op['amount']['currency'] ?? 'RUB'))));
         if ($currency === '') $currency = 'RUB';
-        $opTime = (string)($op['operationDate'] ?? $op['operationTime'] ?? $op['date'] ?? date('Y-m-d H:i:s'));
+        $opTime = $this->normalizeDateTimeValue((string)($op['operationDate'] ?? $op['operationTime'] ?? $op['date'] ?? date('Y-m-d H:i:s')));
         $accountNumber = trim((string)($op['accountNumber'] ?? ($op['account']['accountNumber'] ?? '')));
         $description = trim((string)($op['paymentPurpose'] ?? $op['description'] ?? $op['purpose'] ?? ''));
         $counterpartyName = trim((string)($op['counterpartyName'] ?? $op['payerName'] ?? ($op['counterparty']['name'] ?? '')));
         $counterpartyInn = trim((string)($op['counterpartyInn'] ?? $op['payerInn'] ?? ($op['counterparty']['inn'] ?? '')));
+        $operationId = $this->resolveBankOperationId($op, $opTime, $amount, $currency, $accountNumber, $description, $counterpartyName, $counterpartyInn);
+        if ($operationId === '') {
+            return '';
+        }
         $rawJson = json_encode($op, JSON_UNESCAPED_UNICODE);
 
         $fields = ['operation_id'];
@@ -1984,6 +1983,45 @@ endobj
         $stmt->execute();
         $stmt->close();
         return $operationId;
+    }
+
+    private function normalizeDateTimeValue($raw)
+    {
+        $raw = trim((string)$raw);
+        if ($raw === '') {
+            return date('Y-m-d H:i:s');
+        }
+        if (preg_match('/^\d{10}$/', $raw)) {
+            return date('Y-m-d H:i:s', (int)$raw);
+        }
+        if (preg_match('/^\d{13}$/', $raw)) {
+            return date('Y-m-d H:i:s', (int)floor(((float)$raw) / 1000));
+        }
+        $ts = strtotime($raw);
+        if ($ts !== false) {
+            return date('Y-m-d H:i:s', $ts);
+        }
+        return date('Y-m-d H:i:s');
+    }
+
+    private function resolveBankOperationId(array $op, $opTime, $amount, $currency, $accountNumber, $description, $counterpartyName, $counterpartyInn)
+    {
+        $operationId = trim((string)($op['operationId'] ?? $op['operation_id'] ?? $op['id'] ?? ''));
+        if ($operationId !== '') {
+            return substr($operationId, 0, 64);
+        }
+
+        $fingerprint = implode('|', [
+            'ext',
+            (string)$opTime,
+            number_format((float)$amount, 2, '.', ''),
+            strtoupper((string)$currency),
+            preg_replace('/\s+/u', ' ', trim((string)$accountNumber)),
+            preg_replace('/\s+/u', ' ', trim((string)$description)),
+            preg_replace('/\s+/u', ' ', trim((string)$counterpartyName)),
+            preg_replace('/\s+/u', ' ', trim((string)$counterpartyInn)),
+        ]);
+        return 'ext_' . sha1($fingerprint);
     }
 
     private function autoMatchBankOperation($operationId)
