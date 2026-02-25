@@ -8018,6 +8018,7 @@ async function loadFinanceOverviewFromApi() {
     initIncomeExpenseChart();
     initRevenueTable();
     initRevenueTrendsChart();
+    renderRevenueTrendMetrics();
   } catch (err) {
     console.error('loadFinanceOverviewFromApi failed', err);
     showToast('Не удалось загрузить обзор финансов', 'error');
@@ -8026,6 +8027,7 @@ async function loadFinanceOverviewFromApi() {
     initIncomeExpenseChart();
     initRevenueTable();
     initRevenueTrendsChart();
+    renderRevenueTrendMetrics();
   }
 }
 
@@ -8036,6 +8038,41 @@ function getFinanceRevenueTrends(period = '12_months') {
   if (period === '3_months') return rows.slice(-3);
   if (period === '6_months') return rows.slice(-6);
   return rows;
+}
+
+function renderRevenueTrendMetrics() {
+  const momEl = document.getElementById('revenueMoMValue');
+  const yoyEl = document.getElementById('revenueYoYValue');
+  const avgEl = document.getElementById('revenueAvgGrowthValue');
+  const mom = Number(financeSprint2State.overview?.revenue_mom_percent || 0);
+  const yoy = Number(financeSprint2State.overview?.revenue_yoy_percent || 0);
+  const trendRows = getFinanceRevenueTrends('12_months');
+
+  let avgGrowth = 0;
+  if (trendRows.length > 1) {
+    const deltas = [];
+    for (let i = 1; i < trendRows.length; i++) {
+      const prev = Number(trendRows[i - 1]?.revenue || 0);
+      const curr = Number(trendRows[i]?.revenue || 0);
+      if (Math.abs(prev) < 0.000001) continue;
+      deltas.push(((curr - prev) / prev) * 100);
+    }
+    if (deltas.length > 0) {
+      avgGrowth = deltas.reduce((sum, v) => sum + v, 0) / deltas.length;
+    }
+  }
+
+  const applyMetric = (el, value) => {
+    if (!el) return;
+    const rounded = Number.isFinite(value) ? Number(value.toFixed(1)) : 0;
+    el.textContent = `${rounded >= 0 ? '+' : ''}${rounded}%`;
+    el.classList.toggle('positive', rounded >= 0);
+    el.classList.toggle('negative', rounded < 0);
+  };
+
+  applyMetric(momEl, mom);
+  applyMetric(yoyEl, yoy);
+  applyMetric(avgEl, avgGrowth);
 }
 
 function ensureFinanceClientAutocompleteBinding() {
