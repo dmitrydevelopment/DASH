@@ -38,6 +38,24 @@ class SettingsModel
         if (!$ok) {
             $this->setError('ensureRow failed: ' . $this->db->error);
         }
+        $this->ensureFinanceColumns();
+    }
+
+    private function ensureFinanceColumns(): void
+    {
+        try {
+            $res = $this->db->query("SHOW COLUMNS FROM crm_settings LIKE 'finance_total_expense'");
+            if ($res) {
+                $exists = $res->num_rows > 0;
+                $res->close();
+                if (!$exists) {
+                    $this->db->query("ALTER TABLE crm_settings ADD COLUMN finance_total_expense DECIMAL(12,2) NOT NULL DEFAULT 0");
+                    $this->columnsCache = null;
+                }
+            }
+        } catch (Throwable $e) {
+            $this->setError('ensureFinanceColumns failed: ' . $e->getMessage());
+        }
     }
 
     /**

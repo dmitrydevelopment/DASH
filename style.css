@@ -3152,6 +3152,17 @@ body {
   border-radius: var(--radius-sm);
 }
 
+#settings input[type="number"]::-webkit-outer-spin-button,
+#settings input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+#settings input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
 .heatmap-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

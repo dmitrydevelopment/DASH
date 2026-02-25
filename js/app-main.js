@@ -8017,6 +8017,12 @@ async function loadFinanceOverviewFromApi() {
   } catch (err) {
     console.error('loadFinanceOverviewFromApi failed', err);
     showToast('Не удалось загрузить обзор финансов', 'error');
+    renderFinanceOverviewCards();
+    initCategoryChart();
+    initIncomeExpenseChart();
+    initRevenueTable();
+    initRevenueTrendsChart();
+    renderRevenueTrendMetrics();
   }
 }
 
@@ -8136,6 +8142,10 @@ function renderFinanceOverviewCards() {
 
   const categories = Array.isArray(data.income_categories) ? data.income_categories : [];
   if (incomeBreakdownEl) {
+    if (categories.length === 0) {
+      incomeBreakdownEl.innerHTML = '<div class="breakdown-item"><span>Нет данных</span><span>0 ₽</span></div>';
+      return;
+    }
     incomeBreakdownEl.innerHTML = categories.map((cat) => `
       <div class="breakdown-item">
         <span>${escapeHtml(cat.name || 'Без категории')}:</span>

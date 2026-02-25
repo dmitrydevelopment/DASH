@@ -14,6 +14,7 @@ class FinanceController
     private $projects;
     private $financeDocColumns = null;
     private $settingsColumns = null;
+    private $invoicePlanColumns = null;
 
     public function __construct(mysqli $db)
     {
@@ -368,7 +369,12 @@ class FinanceController
         $profit = $monthIncome - $totalExpense;
         $margin = $monthIncome > 0 ? round(($profit / $monthIncome) * 100, 1) : 0.0;
 
-        $trendRows = $this->buildRevenueTrendRows(12);
+        $trendRows = [];
+        try {
+            $trendRows = $this->buildRevenueTrendRows(12);
+        } catch (Throwable $e) {
+            $trendRows = [];
+        }
         $mom = 0.0;
         $yoy = 0.0;
         if (!empty($trendRows)) {
@@ -1256,27 +1262,32 @@ class FinanceController
             $stmtDocs->close();
         }
 
-        $sqlPlanned = "SELECT YEAR(p.planned_send_date) AS y, MONTH(p.planned_send_date) AS m,
-                              SUM(COALESCE(p.total_sum, 0)) AS planned_total
-                       FROM invoice_plans p
-                       WHERE p.status = 'planned'
-                         AND p.planned_send_date IS NOT NULL
-                         AND p.planned_send_date >= ?
-                       GROUP BY YEAR(p.planned_send_date), MONTH(p.planned_send_date)";
-        $stmtPlanned = $this->db->prepare($sqlPlanned);
-        if ($stmtPlanned) {
-            $stmtPlanned->bind_param('s', $startDate);
-            $stmtPlanned->execute();
-            $res = $stmtPlanned->get_result();
-            while ($res && ($row = $res->fetch_assoc())) {
-                $key = sprintf('%04d-%02d', (int)($row['y'] ?? 0), (int)($row['m'] ?? 0));
-                if (!isset($range[$key])) {
-                    continue;
+        if ($this->hasInvoicePlanColumn('planned_send_date')
+            && $this->hasInvoicePlanColumn('status')
+            && $this->hasInvoicePlanColumn('total_sum')
+        ) {
+            $sqlPlanned = "SELECT YEAR(p.planned_send_date) AS y, MONTH(p.planned_send_date) AS m,
+                                  SUM(COALESCE(p.total_sum, 0)) AS planned_total
+                           FROM invoice_plans p
+                           WHERE p.status = 'planned'
+                             AND p.planned_send_date IS NOT NULL
+                             AND p.planned_send_date >= ?
+                           GROUP BY YEAR(p.planned_send_date), MONTH(p.planned_send_date)";
+            $stmtPlanned = $this->db->prepare($sqlPlanned);
+            if ($stmtPlanned) {
+                $stmtPlanned->bind_param('s', $startDate);
+                $stmtPlanned->execute();
+                $res = $stmtPlanned->get_result();
+                while ($res && ($row = $res->fetch_assoc())) {
+                    $key = sprintf('%04d-%02d', (int)($row['y'] ?? 0), (int)($row['m'] ?? 0));
+                    if (!isset($range[$key])) {
+                        continue;
+                    }
+                    $planned = (float)($row['planned_total'] ?? 0);
+                    $range[$key]['projected'] = $range[$key]['confirmed'] + $planned;
                 }
-                $planned = (float)($row['planned_total'] ?? 0);
-                $range[$key]['projected'] = $range[$key]['confirmed'] + $planned;
+                $stmtPlanned->close();
             }
-            $stmtPlanned->close();
         }
 
         foreach ($range as $key => &$row) {
@@ -1521,6 +1532,25 @@ endobj
             }
         }
         return isset($this->settingsColumns[$name]);
+    }
+
+    private function hasInvoicePlanColumn($name)
+    {
+        $name = (string)$name;
+        if ($name === '') {
+            return false;
+        }
+        if ($this->invoicePlanColumns === null) {
+            $this->invoicePlanColumns = [];
+            $res = $this->db->query('SHOW COLUMNS FROM invoice_plans');
+            if ($res) {
+                while ($row = $res->fetch_assoc()) {
+                    $this->invoicePlanColumns[(string)$row['Field']] = true;
+                }
+                $res->close();
+            }
+        }
+        return isset($this->invoicePlanColumns[$name]);
     }
 
     private function bindStmtParams(mysqli_stmt $stmt, $types, array $params)
