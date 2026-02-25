@@ -4569,7 +4569,7 @@ body {
 }
 
 .crm-notification-trigger-row {
-  grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(120px, 0.55fr) minmax(150px, 0.7fr) auto;
   gap: var(--space-12);
   align-items: end;
 }
@@ -4578,6 +4578,7 @@ body {
   margin-top: 0;
   white-space: nowrap;
   justify-content: flex-end;
+  gap: var(--space-8);
 }
 
 .inline-checkbox {
