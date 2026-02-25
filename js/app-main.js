@@ -7200,36 +7200,39 @@ async function searchPaymentMatchCandidates() {
       container.innerHTML = '<div class="no-data">Счета не найдены</div>';
       return;
     }
-    container.innerHTML = `
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Клиент</th>
-            <th>Номер</th>
-            <th>Дата</th>
-            <th>Сумма</th>
-            <th>Тип</th>
-            <th>Действие</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map((inv) => `
-            <tr>
-              <td>${escapeHtml(inv.client_name || '—')}</td>
-              <td>${escapeHtml(inv.doc_number || '—')}</td>
-              <td>${inv.doc_date ? new Date(inv.doc_date).toLocaleDateString('ru-RU') : '—'}</td>
-              <td style="text-align:right;">${formatCurrency(Number(inv.amount || 0))}</td>
-              <td>${inv.invoice_type === 'project' ? 'Проект' : 'Поддержка'}</td>
-              <td><button type="button" class="btn btn--primary" onclick="confirmPaymentMatch(${Number(inv.id || 0)})">Зачесть</button></td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-    `;
+    container.innerHTML = '<div class="kanban-cards payment-match-cards"></div>';
+    const cardsWrap = container.querySelector('.payment-match-cards');
+    rows.forEach((inv) => {
+      cardsWrap?.appendChild(createPaymentMatchCandidateCard(inv));
+    });
   } catch (err) {
     console.error('searchPaymentMatchCandidates failed', err);
     container.innerHTML = '<div class="no-data">Не удалось получить список счетов</div>';
   }
+}
+
+function createPaymentMatchCandidateCard(inv) {
+  const mapped = {
+    id: Number(inv?.plan_id || 0),
+    client_name: String(inv?.client_name || '—'),
+    period_label: String(inv?.period_label || '—'),
+    total_sum: Number(inv?.amount || 0),
+    sent_date: String(inv?.sent_date || inv?.doc_date || '—'),
+    days_since_sent: Number(inv?.days_since_sent || 0),
+    payment_due_days: Number(inv?.payment_due_days || 0)
+  };
+  const card = createWaitingCard(mapped, !!inv?.is_overdue);
+  const actions = card.querySelector('.kanban-card-actions');
+  const documentId = Number(inv?.id || 0);
+  if (actions && documentId > 0) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'action-btn action-btn--edit';
+    btn.textContent = 'Зачесть';
+    btn.addEventListener('click', () => confirmPaymentMatch(documentId));
+    actions.insertBefore(btn, actions.firstChild || null);
+  }
+  return card;
 }
 
 async function confirmPaymentMatch(documentId) {

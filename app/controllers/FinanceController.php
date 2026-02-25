@@ -652,10 +652,21 @@ class FinanceController
                END"
             : "CASE WHEN d.doc_number LIKE 'INV-PLAN-%' THEN 'project' ELSE 'support' END";
 
+        $overdueDays = (int)$this->getOverdueDaysSetting();
+        $invoiceDateExpr = "COALESCE(d.doc_date, DATE(d.created_at))";
+        $sentDateExpr = "COALESCE(DATE(ip.sent_at), $invoiceDateExpr)";
+        $daysSinceSentExpr = "GREATEST(DATEDIFF(CURDATE(), $sentDateExpr), 0)";
+        $isOverdueExpr = "($daysSinceSentExpr > $overdueDays)";
+        $periodLabelExpr = "COALESCE(ip.period_label, CONCAT(LPAD(d.period_month, 2, '0'), '.', d.period_year))";
+
         $sql = "SELECT d.id, d.client_id, c.name AS client_name, d.doc_number, d.doc_date, d.total_sum, d.download_token,
+                       ip.id AS plan_id, $periodLabelExpr AS period_label, $sentDateExpr AS sent_date,
+                       $daysSinceSentExpr AS days_since_sent, $overdueDays AS payment_due_days,
+                       CASE WHEN $isOverdueExpr THEN 1 ELSE 0 END AS is_overdue,
                        $invoiceTypeExpr AS invoice_type
                 FROM finance_documents d
                 INNER JOIN clients c ON c.id = d.client_id
+                LEFT JOIN invoice_plans ip ON ip.document_id = d.id
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY d.doc_date DESC, d.id DESC
                 LIMIT 300";
@@ -675,6 +686,12 @@ class FinanceController
                 'client_name' => (string)($row['client_name'] ?? ''),
                 'doc_number' => (string)($row['doc_number'] ?? ''),
                 'doc_date' => (string)($row['doc_date'] ?? ''),
+                'plan_id' => (int)($row['plan_id'] ?? 0),
+                'period_label' => (string)($row['period_label'] ?? ''),
+                'sent_date' => (string)($row['sent_date'] ?? ''),
+                'days_since_sent' => max(0, (int)($row['days_since_sent'] ?? 0)),
+                'payment_due_days' => max(0, (int)($row['payment_due_days'] ?? $overdueDays)),
+                'is_overdue' => (int)($row['is_overdue'] ?? 0) === 1,
                 'amount' => (float)($row['total_sum'] ?? 0),
                 'invoice_type' => (string)($row['invoice_type'] ?? 'support'),
                 'invoice_download_url' => !empty($row['download_token'])
