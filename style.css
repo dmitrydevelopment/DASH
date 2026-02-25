@@ -4606,11 +4606,13 @@ body {
 
 .payment-match-actions {
   display: flex;
+  justify-content: space-between;
   margin-bottom: 12px;
 }
 
 .payment-match-actions .btn {
-  width: 100%;
+  flex: 0 0 24%;
+  min-width: 120px;
 }
 
 #paymentMatchModal .modal-content {
