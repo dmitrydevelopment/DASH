@@ -1275,7 +1275,7 @@ function initFinanceTab() {
 }
 
 function initFinanceSubcategories() {
-  const subcategoryBtns = document.querySelectorAll('#finance .subcategory-btn');
+  const subcategoryBtns = document.querySelectorAll('#finance .subcategory-btn[data-subcategory]');
   subcategoryBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       const subcategory = btn.dataset.subcategory;
@@ -1286,7 +1286,7 @@ function initFinanceSubcategories() {
 
 function switchFinanceSubcategory(subcategory) {
   // Update active button
-  const subcategoryBtns = document.querySelectorAll('#finance .subcategory-btn');
+  const subcategoryBtns = document.querySelectorAll('#finance .subcategory-btn[data-subcategory]');
   subcategoryBtns.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.subcategory === subcategory);
   });
@@ -6492,6 +6492,10 @@ const financeSprint2State = {
   payments: [],
   unknownPayments: [],
   paymentsTab: 'paid',
+  paymentsFilters: {
+    paid: { dateFrom: '', dateTo: '', client: '' },
+    unknown: { dateFrom: '', dateTo: '' }
+  },
   paymentMatchModalOperation: null,
   receivables: {
     top_debtors: [],
@@ -6880,11 +6884,43 @@ function updateRevenueTrendsPeriod(period) {
 
 function initPaymentsHistory() {
   bindFinanceClientAutocomplete('historyClientSearch', 'historyClientSuggestions');
+  const getClientFilterWrap = () => {
+    const input = document.getElementById('historyClientSearch');
+    if (!input) return null;
+    return input.closest('.period-selector');
+  };
+  const applyHistoryFilterUiFromState = (tab) => {
+    const from = document.getElementById('historyDateFrom');
+    const to = document.getElementById('historyDateTo');
+    const client = document.getElementById('historyClientSearch');
+    const suggestions = document.getElementById('historyClientSuggestions');
+    const clientWrap = getClientFilterWrap();
+    const state = tab === 'unknown'
+      ? (financeSprint2State.paymentsFilters.unknown || { dateFrom: '', dateTo: '' })
+      : (financeSprint2State.paymentsFilters.paid || { dateFrom: '', dateTo: '', client: '' });
+
+    if (from) from.value = state.dateFrom || '';
+    if (to) to.value = state.dateTo || '';
+    if (client) client.value = tab === 'paid' ? (state.client || '') : '';
+    if (suggestions) suggestions.style.display = 'none';
+    if (clientWrap) clientWrap.style.display = tab === 'paid' ? '' : 'none';
+  };
+  const syncHistoryFilterStateFromUi = (tab) => {
+    const from = document.getElementById('historyDateFrom')?.value || '';
+    const to = document.getElementById('historyDateTo')?.value || '';
+    if (tab === 'unknown') {
+      financeSprint2State.paymentsFilters.unknown = { dateFrom: from, dateTo: to };
+      return;
+    }
+    const client = document.getElementById('historyClientSearch')?.value?.trim() || '';
+    financeSprint2State.paymentsFilters.paid = { dateFrom: from, dateTo: to, client };
+  };
   if (!financeSprint2State.historyBindDone) {
     financeSprint2State.historyBindDone = true;
     const paidBtn = document.getElementById('paymentsTabPaidBtn');
     const unknownBtn = document.getElementById('paymentsTabUnknownBtn');
     const setTab = (tab) => {
+      syncHistoryFilterStateFromUi(financeSprint2State.paymentsTab || 'paid');
       financeSprint2State.paymentsTab = tab;
       if (paidBtn) paidBtn.classList.toggle('active', tab === 'paid');
       if (unknownBtn) unknownBtn.classList.toggle('active', tab === 'unknown');
@@ -6892,6 +6928,7 @@ function initPaymentsHistory() {
       const unknownTable = document.getElementById('paymentsUnknownTable');
       if (paidTable) paidTable.style.display = tab === 'paid' ? 'block' : 'none';
       if (unknownTable) unknownTable.style.display = tab === 'unknown' ? 'block' : 'none';
+      applyHistoryFilterUiFromState(tab);
     };
     paidBtn?.addEventListener('click', () => {
       setTab('paid');
@@ -6902,6 +6939,7 @@ function initPaymentsHistory() {
       loadUnknownPaymentsFromApi();
     });
     document.getElementById('historyApplyBtn')?.addEventListener('click', () => {
+      syncHistoryFilterStateFromUi(financeSprint2State.paymentsTab || 'paid');
       if (financeSprint2State.paymentsTab === 'unknown') {
         loadUnknownPaymentsFromApi();
       } else {
@@ -6913,6 +6951,11 @@ function initPaymentsHistory() {
       const to = document.getElementById('historyDateTo');
       const client = document.getElementById('historyClientSearch');
       const suggestions = document.getElementById('historyClientSuggestions');
+      if (financeSprint2State.paymentsTab === 'unknown') {
+        financeSprint2State.paymentsFilters.unknown = { dateFrom: '', dateTo: '' };
+      } else {
+        financeSprint2State.paymentsFilters.paid = { dateFrom: '', dateTo: '', client: '' };
+      }
       if (from) from.value = '';
       if (to) to.value = '';
       if (client) client.value = '';
@@ -6929,8 +6972,10 @@ function initPaymentsHistory() {
     setTab(financeSprint2State.paymentsTab || 'paid');
   }
   if (financeSprint2State.paymentsTab === 'unknown') {
+    applyHistoryFilterUiFromState('unknown');
     loadUnknownPaymentsFromApi();
   } else {
+    applyHistoryFilterUiFromState('paid');
     loadPaymentsHistoryFromApi();
   }
 }
@@ -6939,9 +6984,10 @@ async function loadPaymentsHistoryFromApi() {
   try {
     showLoadingIndicator();
     const params = new URLSearchParams();
-    const from = document.getElementById('historyDateFrom')?.value || '';
-    const to = document.getElementById('historyDateTo')?.value || '';
-    const client = document.getElementById('historyClientSearch')?.value?.trim() || '';
+    const filters = financeSprint2State.paymentsFilters.paid || {};
+    const from = filters.dateFrom || '';
+    const to = filters.dateTo || '';
+    const client = filters.client || '';
     if (from) params.set('date_from', from);
     if (to) params.set('date_to', to);
     if (client) params.set('client', client);
@@ -7001,12 +7047,11 @@ async function loadUnknownPaymentsFromApi() {
   try {
     showLoadingIndicator();
     const params = new URLSearchParams();
-    const from = document.getElementById('historyDateFrom')?.value || '';
-    const to = document.getElementById('historyDateTo')?.value || '';
-    const q = document.getElementById('historyClientSearch')?.value?.trim() || '';
+    const filters = financeSprint2State.paymentsFilters.unknown || {};
+    const from = filters.dateFrom || '';
+    const to = filters.dateTo || '';
     if (from) params.set('date_from', from);
     if (to) params.set('date_to', to);
-    if (q) params.set('q', q);
     params.set('_', String(Date.now()));
     const result = await fetchFinanceJson(`/api.php/finance/payments-unknown?${params.toString()}`);
     const rows = Array.isArray(result?.data?.items) ? result.data.items : [];
