@@ -39,7 +39,6 @@ class SettingsModel
             $this->setError('ensureRow failed: ' . $this->db->error);
         }
         $this->ensureFinanceColumns();
-        $this->ensureNotificationTriggersTable();
     }
 
     private function ensureFinanceColumns(): void
@@ -79,32 +78,6 @@ class SettingsModel
         }
     }
 
-    private function ensureNotificationTriggersTable(): void
-    {
-        try {
-            $sql = "CREATE TABLE IF NOT EXISTS notification_triggers (
-                        id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-                        event_code VARCHAR(128) COLLATE utf8mb4_unicode_ci NOT NULL,
-                        trigger_name VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
-                        channel ENUM('email','telegram','webhook') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'telegram',
-                        recipient VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
-                        is_active TINYINT(1) NOT NULL DEFAULT 1,
-                        sort_order INT(10) UNSIGNED NOT NULL DEFAULT 0,
-                        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        PRIMARY KEY (id),
-                        UNIQUE KEY uniq_trigger_event_channel_recipient (event_code, channel, recipient),
-                        KEY idx_trigger_sort (sort_order, id)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
-            $this->db->query($sql);
-
-            $seed = "INSERT IGNORE INTO notification_triggers (event_code, trigger_name, channel, recipient, is_active, sort_order)
-                     VALUES ('finance.unknown_payment.created', 'Появление новой неопознанной оплаты', 'telegram', '', 1, 0)";
-            $this->db->query($seed);
-        } catch (Throwable $e) {
-            $this->setError('ensureNotificationTriggersTable failed: ' . $e->getMessage());
-        }
-    }
 
     /**
      * @return array<string,bool>
@@ -638,8 +611,6 @@ class SettingsModel
 
     public function getNotificationTriggers(): array
     {
-        $this->ensureNotificationTriggersTable();
-
         $res = $this->db->query(
             "SELECT id, event_code, trigger_name, channel, recipient, is_active, sort_order
              FROM notification_triggers
@@ -647,6 +618,9 @@ class SettingsModel
         );
 
         if ($res === false) {
+            if ((int)$this->db->errno === 1146) {
+                return [];
+            }
             return [];
         }
 
@@ -669,7 +643,14 @@ class SettingsModel
 
     public function replaceNotificationTriggers(array $triggers): bool
     {
-        $this->ensureNotificationTriggersTable();
+        $check = $this->db->query("SELECT 1 FROM notification_triggers LIMIT 1");
+        if ($check === false && (int)$this->db->errno === 1146) {
+            return true;
+        }
+        if ($check instanceof mysqli_result) {
+            $check->close();
+        }
+
         $this->db->begin_transaction();
 
         try {

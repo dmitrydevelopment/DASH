@@ -2065,7 +2065,6 @@ endobj
         if ($eventCode === '') {
             return;
         }
-        $this->ensureNotificationTriggersTable();
 
         $stmt = $this->db->prepare(
             "SELECT id, channel, recipient
@@ -2089,7 +2088,6 @@ endobj
             return;
         }
 
-        $this->ensureNotificationTriggerEventsTable();
         $payloadJson = json_encode($payload, JSON_UNESCAPED_UNICODE);
         foreach ($triggers as $trigger) {
             $triggerId = (int)($trigger['id'] ?? 0);
@@ -2111,51 +2109,6 @@ endobj
             $insert->execute();
             $insert->close();
         }
-    }
-
-    private function ensureNotificationTriggerEventsTable()
-    {
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS notification_trigger_events (
-                id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-                trigger_id INT(10) UNSIGNED NOT NULL,
-                event_code VARCHAR(128) COLLATE utf8mb4_unicode_ci NOT NULL,
-                channel ENUM('email','telegram','webhook') COLLATE utf8mb4_unicode_ci NOT NULL,
-                recipient VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
-                payload_json LONGTEXT COLLATE utf8mb4_unicode_ci,
-                status ENUM('queued','sent','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                processed_at DATETIME DEFAULT NULL,
-                PRIMARY KEY (id),
-                KEY idx_trigger_id (trigger_id),
-                KEY idx_event_code (event_code),
-                KEY idx_status_created (status, created_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
-    }
-
-    private function ensureNotificationTriggersTable()
-    {
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS notification_triggers (
-                id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-                event_code VARCHAR(128) COLLATE utf8mb4_unicode_ci NOT NULL,
-                trigger_name VARCHAR(191) COLLATE utf8mb4_unicode_ci NOT NULL,
-                channel ENUM('email','telegram','webhook') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'telegram',
-                recipient VARCHAR(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
-                is_active TINYINT(1) NOT NULL DEFAULT 1,
-                sort_order INT(10) UNSIGNED NOT NULL DEFAULT 0,
-                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                PRIMARY KEY (id),
-                UNIQUE KEY uniq_trigger_event_channel_recipient (event_code, channel, recipient),
-                KEY idx_trigger_sort (sort_order, id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
-        );
-        $this->db->query(
-            "INSERT IGNORE INTO notification_triggers (event_code, trigger_name, channel, recipient, is_active, sort_order)
-             VALUES ('finance.unknown_payment.created', 'Появление новой неопознанной оплаты', 'telegram', '', 1, 0)"
-        );
     }
 
     private function normalizeDateTimeValue($raw)

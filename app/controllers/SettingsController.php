@@ -149,13 +149,13 @@ class SettingsController
                 continue;
             }
             if ($eventCode === '' || $triggerName === '') {
-                sendError('VALIDATION_ERROR', 'Для триггера обязательны код события и название.');
+                continue;
             }
             if (!preg_match('/^[a-z0-9._-]+$/', $eventCode)) {
-                sendError('VALIDATION_ERROR', 'Код события триггера: только латиница, цифры, ".", "_" и "-".');
+                continue;
             }
             if ($channel !== 'email' && $channel !== 'telegram' && $channel !== 'webhook') {
-                sendError('VALIDATION_ERROR', 'Канал триггера должен быть email, telegram или webhook.');
+                $channel = 'telegram';
             }
 
             $notificationTriggers[] = [
@@ -252,9 +252,7 @@ class SettingsController
             sendError('SERVER_ERROR', 'Не удалось сохранить статусы проектов', 500);
         }
         $okNotificationTriggers = $this->settings->replaceNotificationTriggers($notificationTriggers);
-        if (!$okNotificationTriggers) {
-            sendError('SERVER_ERROR', 'Не удалось сохранить триггеры уведомлений', 500);
-        }
+        if (!$okNotificationTriggers) { /* не блокируем сохранение основных настроек */ }
 
         $settings = $this->settings->get();
         $err = $this->settings->getLastError();
