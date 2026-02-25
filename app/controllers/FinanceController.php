@@ -667,8 +667,7 @@ class FinanceController
         ], JSON_UNESCAPED_UNICODE);
 
         $existing = $this->plans->findByClientPeriod((int)$project['client_id'], $periodYear, $periodMonth);
-        $canReuseExisting = $existing && (string)($existing['status'] ?? '') === 'planned';
-        if ($canReuseExisting) {
+        if ($existing) {
             $planId = (int)($existing['id'] ?? 0);
             if ($planId <= 0) {
                 sendError('CREATE_FAILED', 'Не удалось создать счет по проекту', 500);
@@ -684,15 +683,26 @@ class FinanceController
             }
             $plan = $this->plans->find($planId);
         } else {
-            $planId = $this->plans->create(
-                (int)$project['client_id'],
-                $periodYear,
-                $periodMonth,
-                $periodLabel,
-                json_encode($items, JSON_UNESCAPED_UNICODE),
-                $channelsJson,
-                $sendDate
-            );
+            $planId = 0;
+            try {
+                $planId = $this->plans->create(
+                    (int)$project['client_id'],
+                    $periodYear,
+                    $periodMonth,
+                    $periodLabel,
+                    json_encode($items, JSON_UNESCAPED_UNICODE),
+                    $channelsJson,
+                    $sendDate
+                );
+            } catch (Throwable $e) {
+                if (stripos((string)$e->getMessage(), 'Duplicate entry') === false) {
+                    throw $e;
+                }
+            }
+            if ($planId <= 0) {
+                $existingAfterInsert = $this->plans->findByClientPeriod((int)$project['client_id'], $periodYear, $periodMonth);
+                $planId = (int)($existingAfterInsert['id'] ?? 0);
+            }
             if ($planId <= 0) {
                 sendError('CREATE_FAILED', 'Не удалось создать счет по проекту', 500);
             }
