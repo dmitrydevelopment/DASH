@@ -210,6 +210,22 @@ class FinanceController
             }
         }
 
+        $sortBySentAtDesc = function (array $a, array $b) {
+            $aTs = !empty($a['sent_at']) ? strtotime((string)$a['sent_at']) : 0;
+            $bTs = !empty($b['sent_at']) ? strtotime((string)$b['sent_at']) : 0;
+            if ($aTs === $bTs) {
+                $aCreated = !empty($a['created_at']) ? strtotime((string)$a['created_at']) : 0;
+                $bCreated = !empty($b['created_at']) ? strtotime((string)$b['created_at']) : 0;
+                if ($aCreated === $bCreated) {
+                    return (int)($b['id'] ?? 0) <=> (int)($a['id'] ?? 0);
+                }
+                return $bCreated <=> $aCreated;
+            }
+            return $bTs <=> $aTs;
+        };
+        usort($waitingRecent, $sortBySentAtDesc);
+        usort($waitingOverdue, $sortBySentAtDesc);
+
         $projectsOut = [];
         foreach ($projects as $project) {
             $workItems = json_decode((string)($project['work_items_json'] ?? '[]'), true);
