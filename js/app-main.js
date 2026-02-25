@@ -7145,7 +7145,7 @@ function renderUnknownPaymentsTable(data) {
             <td>${escapeHtml(row.counterparty_inn || '—')}</td>
             <td>${escapeHtml(row.description || '—')}</td>
             <td style="text-align:right;">${formatCurrency(Number(row.amount || 0))}</td>
-            <td><button type="button" class="btn btn--secondary" onclick="openUnknownPaymentDetails(${JSON.stringify(String(row.operation_id || ''))})">Показать</button></td>
+            <td><button type="button" class="btn btn--secondary" onclick="openUnknownPaymentDetails('${escapeHtml(String(row.operation_id || ''))}')">Показать</button></td>
             <td><button type="button" class="btn btn--primary" onclick="openPaymentMatchModal('${escapeHtml(String(row.operation_id || ''))}')">Найти счет</button></td>
           </tr>
         `).join('')}
