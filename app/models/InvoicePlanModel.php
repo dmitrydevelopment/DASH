@@ -4,6 +4,7 @@ class InvoicePlanModel
 {
     private $db;
     private $invoicePlanColumns = null;
+    private $financeDocColumns = null;
 
     public function __construct(mysqli $db)
     {
@@ -101,6 +102,213 @@ class InvoicePlanModel
 
         $this->invoicePlanColumns = $cols;
         return $cols;
+    }
+
+    private function getFinanceDocColumns()
+    {
+        if ($this->financeDocColumns !== null) {
+            return $this->financeDocColumns;
+        }
+
+        $cols = [];
+        $res = $this->db->query('SHOW COLUMNS FROM finance_documents');
+        if ($res) {
+            while ($row = $res->fetch_assoc()) {
+                $cols[(string)$row['Field']] = true;
+            }
+            $res->close();
+        }
+        $this->financeDocColumns = $cols;
+        return $cols;
+    }
+
+    public function ensurePlanByDocument(array $doc, array $client = [])
+    {
+        $planCols = $this->getInvoicePlanColumns();
+        if (empty($planCols)) {
+            return 0;
+        }
+
+        $docId = (int)($doc['id'] ?? 0);
+        $clientId = (int)($doc['client_id'] ?? 0);
+        if ($docId <= 0 || $clientId <= 0) {
+            return 0;
+        }
+
+        $periodYear = (int)($doc['period_year'] ?? 0);
+        $periodMonth = (int)($doc['period_month'] ?? 0);
+        $docDate = (string)($doc['doc_date'] ?? '');
+        if (($periodYear <= 0 || $periodMonth <= 0) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $docDate)) {
+            $periodYear = (int)date('Y', strtotime($docDate));
+            $periodMonth = (int)date('m', strtotime($docDate));
+        }
+        if ($periodYear <= 0 || $periodMonth <= 0) {
+            $periodYear = (int)date('Y');
+            $periodMonth = (int)date('m');
+        }
+
+        $periodLabel = sprintf('%02d.%04d', $periodMonth, $periodYear);
+        $docCols = $this->getFinanceDocColumns();
+        $hasIsPaid = isset($docCols['is_paid']);
+        $hasPaidStatus = isset($docCols['paid_status']);
+        $isPaid = false;
+        if ($hasIsPaid) {
+            $isPaid = ((int)($doc['is_paid'] ?? 0) === 1);
+        }
+        if (!$isPaid && $hasPaidStatus) {
+            $isPaid = ((string)($doc['paid_status'] ?? '') === 'paid');
+        }
+        $status = $isPaid ? 'paid' : 'sent_waiting_payment';
+        $sentAt = preg_match('/^\d{4}-\d{2}-\d{2}$/', $docDate) ? ($docDate . ' 00:00:00') : date('Y-m-d H:i:s');
+
+        $items = [[
+            'name' => 'Счет ' . (string)($doc['doc_number'] ?? ('#' . $docId)),
+            'amount' => (float)($doc['total_sum'] ?? 0),
+            'category' => ''
+        ]];
+        $workItemsJson = json_encode($items, JSON_UNESCAPED_UNICODE);
+        $channelsJson = json_encode([
+            'email' => (string)($client['email'] ?? ''),
+            'send_telegram' => !empty($client['send_invoice_telegram']) ? 1 : 0,
+            'send_diadoc' => !empty($client['send_invoice_diadoc']) ? 1 : 0
+        ], JSON_UNESCAPED_UNICODE);
+
+        if (isset($planCols['document_id'])) {
+            $stmt = $this->db->prepare("SELECT id FROM invoice_plans WHERE document_id = ? LIMIT 1");
+            if ($stmt) {
+                $stmt->bind_param('i', $docId);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $existing = $res ? $res->fetch_assoc() : null;
+                $stmt->close();
+                if ($existing && !empty($existing['id'])) {
+                    return (int)$existing['id'];
+                }
+            }
+        }
+
+        $existingId = 0;
+        $stmt = $this->db->prepare("SELECT id FROM invoice_plans WHERE client_id = ? AND period_year = ? AND period_month = ? ORDER BY id DESC LIMIT 1");
+        if ($stmt) {
+            $stmt->bind_param('iii', $clientId, $periodYear, $periodMonth);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $existing = $res ? $res->fetch_assoc() : null;
+            $stmt->close();
+            if ($existing && !empty($existing['id'])) {
+                $existingId = (int)$existing['id'];
+            }
+        }
+
+        if ($existingId > 0) {
+            $setParts = [];
+            $types = '';
+            $values = [];
+
+            if (isset($planCols['status'])) {
+                $setParts[] = "status = ?";
+                $types .= 's';
+                $values[] = $status;
+            }
+            if (isset($planCols['work_items_json'])) {
+                $setParts[] = "work_items_json = ?";
+                $types .= 's';
+                $values[] = $workItemsJson;
+            }
+            if (isset($planCols['channels_json'])) {
+                $setParts[] = "channels_json = ?";
+                $types .= 's';
+                $values[] = $channelsJson;
+            }
+            if (isset($planCols['document_id'])) {
+                $setParts[] = "document_id = ?";
+                $types .= 'i';
+                $values[] = $docId;
+            }
+            if (isset($planCols['sent_at'])) {
+                $setParts[] = "sent_at = ?";
+                $types .= 's';
+                $values[] = $sentAt;
+            }
+            if (isset($planCols['planned_send_date']) && preg_match('/^\d{4}-\d{2}-\d{2}/', $sentAt)) {
+                $setParts[] = "planned_send_date = ?";
+                $types .= 's';
+                $values[] = substr($sentAt, 0, 10);
+            }
+            if (isset($planCols['updated_at'])) {
+                $setParts[] = "updated_at = NOW()";
+            }
+
+            if (!empty($setParts)) {
+                $sql = "UPDATE invoice_plans SET " . implode(', ', $setParts) . " WHERE id = ?";
+                $types .= 'i';
+                $values[] = $existingId;
+                $stmt = $this->db->prepare($sql);
+                if ($stmt) {
+                    $refs = [];
+                    $refs[] = &$types;
+                    foreach ($values as $k => $v) {
+                        $values[$k] = $v;
+                        $refs[] = &$values[$k];
+                    }
+                    call_user_func_array([$stmt, 'bind_param'], $refs);
+                    $stmt->execute();
+                    $stmt->close();
+                }
+            }
+            return $existingId;
+        }
+
+        $fields = ['client_id', 'period_year', 'period_month', 'period_label', 'status', 'work_items_json', 'channels_json'];
+        $placeholders = ['?', '?', '?', '?', '?', '?', '?'];
+        $types = 'iiissss';
+        $values = [$clientId, $periodYear, $periodMonth, $periodLabel, $status, $workItemsJson, $channelsJson];
+
+        if (isset($planCols['document_id'])) {
+            $fields[] = 'document_id';
+            $placeholders[] = '?';
+            $types .= 'i';
+            $values[] = $docId;
+        }
+        if (isset($planCols['sent_at'])) {
+            $fields[] = 'sent_at';
+            $placeholders[] = '?';
+            $types .= 's';
+            $values[] = $sentAt;
+        }
+        if (isset($planCols['planned_send_date'])) {
+            $fields[] = 'planned_send_date';
+            $placeholders[] = '?';
+            $types .= 's';
+            $values[] = substr($sentAt, 0, 10);
+        }
+        if (isset($planCols['created_at'])) {
+            $fields[] = 'created_at';
+            $placeholders[] = 'NOW()';
+        }
+        if (isset($planCols['updated_at'])) {
+            $fields[] = 'updated_at';
+            $placeholders[] = 'NOW()';
+        }
+
+        $sql = "INSERT INTO invoice_plans (" . implode(',', $fields) . ") VALUES (" . implode(',', $placeholders) . ")";
+        $stmt = $this->db->prepare($sql);
+        if (!$stmt) {
+            return 0;
+        }
+
+        $refs = [];
+        $refs[] = &$types;
+        foreach ($values as $k => $v) {
+            $values[$k] = $v;
+            $refs[] = &$values[$k];
+        }
+        call_user_func_array([$stmt, 'bind_param'], $refs);
+
+        $ok = $stmt->execute();
+        $id = $ok ? (int)$this->db->insert_id : 0;
+        $stmt->close();
+        return $id;
     }
 
     public function create($clientId, $periodYear, $periodMonth, $periodLabel, $workItemsJson, $channelsJson, $plannedSendDate)

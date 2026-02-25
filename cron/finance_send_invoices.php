@@ -8,6 +8,7 @@ $db = require __DIR__ . '/../app/bootstrap.php';
 require_once APP_BASE_PATH . '/app/models/SettingsModel.php';
 require_once APP_BASE_PATH . '/app/models/FinanceDocumentModel.php';
 require_once APP_BASE_PATH . '/app/models/FinanceSendEventModel.php';
+require_once APP_BASE_PATH . '/app/models/InvoicePlanModel.php';
 
 require_once APP_BASE_PATH . '/app/services/FinanceCalendarService.php';
 require_once APP_BASE_PATH . '/app/services/FinanceFileStorage.php';
@@ -83,6 +84,7 @@ $tgSvc = new TelegramService($tgBotToken);
 
 $docs = new FinanceDocumentModel($db);
 $events = new FinanceSendEventModel($db);
+$plans = new InvoicePlanModel($db);
 
 $clientSql = "SELECT id, name, legal_name, inn, kpp, email, additional_email, telegram_id, chat_id,
                     send_invoice_schedule, invoice_use_end_month_date, send_invoice_telegram, send_invoice_diadoc
@@ -222,6 +224,13 @@ foreach ($clients as $c) {
     }
 
     $docId = (int) $doc['id'];
+    $planId = $plans->ensurePlanByDocument($doc, $c);
+    if ($planId > 0) {
+        echo "PLAN_SYNC_OK client_id={$clientId} plan_id={$planId} doc_id={$docId}\n";
+    } else {
+        echo "PLAN_SYNC_FAIL client_id={$clientId} doc_id={$docId}\n";
+    }
+
     $absPath = $docs->getAbsoluteFilePath($doc);
     if (!$absPath || !is_file($absPath)) {
         echo "DOC_FILE_MISSING client_id={$clientId} doc_id={$docId}\n";
