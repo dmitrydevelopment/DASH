@@ -7986,7 +7986,7 @@ const financeSprint2State = {
   },
   acts: [],
   paymentsSortOrder: { field: null, direction: 'asc' },
-  topDebtorsSortOrder: { field: null, direction: 'asc' },
+  topDebtorsSortOrder: { field: 'client', direction: 'asc' },
   invoiceTimelineSortOrder: { field: null, direction: 'asc' },
   historyBindDone: false,
   receivablesBindDone: false,
@@ -8497,6 +8497,9 @@ function initReceivablesSubcategory() {
       if (suggestions) suggestions.style.display = 'none';
       loadReceivablesFromApi();
     });
+    document.getElementById('receivablesDebtorsSearch')?.addEventListener('input', () => {
+      renderTopDebtorsTableFinance();
+    });
   }
   loadReceivablesFromApi();
 }
@@ -8520,7 +8523,6 @@ async function loadReceivablesFromApi() {
     renderReceivablesOverviewFromApi(data.summary_metrics || {});
     renderAgingBucketsGridFromApi(data.aging_buckets || {});
     renderTopDebtorsTableFinance();
-    renderInvoiceTimelineTableFinance();
   } catch (err) {
     console.error('loadReceivablesFromApi failed', err);
     showToast('Не удалось загрузить задолженности', 'error');
@@ -8561,11 +8563,54 @@ function renderAgingBucketsGridFromApi(buckets) {
 function renderTopDebtorsTableFinance() {
   const container = document.getElementById('topDebtorsTableFinance');
   if (!container) return;
-  const debtors = Array.isArray(financeSprint2State.receivables.top_debtors) ? financeSprint2State.receivables.top_debtors : [];
-  if (debtors.length === 0) {
+  const rows = [...(Array.isArray(financeSprint2State.receivables.invoice_timeline) ? financeSprint2State.receivables.invoice_timeline : [])];
+  const query = (document.getElementById('receivablesDebtorsSearch')?.value || '').trim().toLowerCase();
+  const filtered = query
+    ? rows.filter((r) => String(r.client || '').toLowerCase().includes(query))
+    : rows;
+
+  const field = financeSprint2State.topDebtorsSortOrder.field || 'client';
+  const direction = financeSprint2State.topDebtorsSortOrder.direction || 'asc';
+  const priorityWeight = (item) => {
+    const d = Number(item.days_overdue || 0);
+    const amount = Number(item.amount || 0);
+    if (d > 90 || amount >= 150000) return 4;
+    if (d > 60 || amount >= 80000) return 3;
+    if (d > 0) return 2;
+    return 1;
+  };
+
+  filtered.sort((a, b) => {
+    let aVal = a[field];
+    let bVal = b[field];
+    if (field === 'client') {
+      aVal = String(aVal || '').toLowerCase();
+      bVal = String(bVal || '').toLowerCase();
+    } else if (field === 'priority') {
+      aVal = priorityWeight(a);
+      bVal = priorityWeight(b);
+    } else if (field === 'invoice_date') {
+      aVal = aVal ? new Date(aVal).getTime() : 0;
+      bVal = bVal ? new Date(bVal).getTime() : 0;
+    } else {
+      aVal = Number(aVal || 0);
+      bVal = Number(bVal || 0);
+    }
+    if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+    if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  if (filtered.length === 0) {
     container.innerHTML = '<div class="no-data">Нет данных по должникам</div>';
     return;
   }
+
+  const getPriority = (item) => (priorityWeight(item) === 4 ? 'Критический'
+    : priorityWeight(item) === 3 ? 'Высокий'
+    : priorityWeight(item) === 2 ? 'Средний'
+    : 'Низкий');
+
   container.innerHTML = `
     <table class="data-table">
       <thead>
@@ -8573,18 +8618,20 @@ function renderTopDebtorsTableFinance() {
           <th style="cursor: pointer;" onclick="sortTopDebtorsTable('client')">Клиент ↕</th>
           <th style="cursor: pointer;" onclick="sortTopDebtorsTable('amount')">Сумма ↕</th>
           <th style="cursor: pointer;" onclick="sortTopDebtorsTable('days_overdue')">Дней просрочки ↕</th>
-          <th>Статус</th>
-          <th>Приоритет</th>
+          <th style="cursor: pointer;" onclick="sortTopDebtorsTable('priority')">Приоритет ↕</th>
+          <th style="cursor: pointer;" onclick="sortTopDebtorsTable('invoice_date')">Дата счета ↕</th>
+          <th>PDF</th>
         </tr>
       </thead>
       <tbody>
-        ${debtors.map((d) => `
+        ${filtered.map((d) => `
           <tr>
             <td>${escapeHtml(d.client || '—')}</td>
             <td style="text-align:right;">${formatCurrency(Number(d.amount || 0))}</td>
             <td>${Number(d.days_overdue || 0)} дн.</td>
-            <td>${escapeHtml(d.status || '—')}</td>
-            <td>${escapeHtml(d.priority || '—')}</td>
+            <td>${escapeHtml(getPriority(d))}</td>
+            <td>${d.invoice_date ? new Date(d.invoice_date).toLocaleDateString('ru-RU') : '—'}</td>
+            <td>${d.invoice_download_url ? `<a href="${escapeHtml(d.invoice_download_url)}" target="_blank" rel="noopener">PDF</a>` : '—'}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -8633,25 +8680,12 @@ function renderInvoiceTimelineTableFinance() {
 }
 
 function sortTopDebtorsTable(field) {
-  const rows = [...(financeSprint2State.receivables.top_debtors || [])];
   if (financeSprint2State.topDebtorsSortOrder.field === field) {
     financeSprint2State.topDebtorsSortOrder.direction = financeSprint2State.topDebtorsSortOrder.direction === 'asc' ? 'desc' : 'asc';
   } else {
     financeSprint2State.topDebtorsSortOrder.field = field;
     financeSprint2State.topDebtorsSortOrder.direction = 'asc';
   }
-  rows.sort((a, b) => {
-    let aVal = a[field];
-    let bVal = b[field];
-    if (field === 'client') {
-      aVal = String(aVal || '').toLowerCase();
-      bVal = String(bVal || '').toLowerCase();
-    }
-    if (aVal < bVal) return financeSprint2State.topDebtorsSortOrder.direction === 'asc' ? -1 : 1;
-    if (aVal > bVal) return financeSprint2State.topDebtorsSortOrder.direction === 'asc' ? 1 : -1;
-    return 0;
-  });
-  financeSprint2State.receivables.top_debtors = rows;
   renderTopDebtorsTableFinance();
 }
 
