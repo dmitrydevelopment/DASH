@@ -1571,6 +1571,25 @@ body {
   border-color: rgba(100, 116, 139, 0.6);
 }
 
+/* Highlight groups in "Выставлено, ожидание оплаты" column only */
+#kanban-waiting-recent .kanban-card {
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.35);
+}
+
+#kanban-waiting-recent .kanban-card:hover {
+  background: rgba(34, 197, 94, 0.14);
+}
+
+#kanban-waiting-overdue .kanban-card {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.35);
+}
+
+#kanban-waiting-overdue .kanban-card:hover {
+  background: rgba(220, 38, 38, 0.14);
+}
+
 .kanban-card h5 {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
