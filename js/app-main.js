@@ -231,11 +231,13 @@ let invoicePlanState = {
 let statusBoardState = {
   projects: [],
   endMonth: [],
+  waitingFailed: [],
   waitingRecent: [],
   waitingOverdue: [],
   metrics: {},
   meta: {}
 };
+let waitingResendSelectedIds = new Set();
 let actsBootstrapLoading = false;
 let projectStatusOptions = [];
 
@@ -415,6 +417,7 @@ async function loadStatusBoard() {
     const board = data && data.data ? data.data : {};
     statusBoardState.projects = Array.isArray(board.projects_in_work) ? board.projects_in_work : [];
     statusBoardState.endMonth = Array.isArray(board.end_month) ? board.end_month.map(normalizeInvoicePlanRow) : [];
+    statusBoardState.waitingFailed = Array.isArray(board.waiting_failed) ? board.waiting_failed.map(normalizeInvoicePlanRow) : [];
     statusBoardState.waitingRecent = Array.isArray(board.waiting_recent) ? board.waiting_recent.map(normalizeInvoicePlanRow) : [];
     statusBoardState.waitingOverdue = Array.isArray(board.waiting_overdue) ? board.waiting_overdue.map(normalizeInvoicePlanRow) : [];
     statusBoardState.meta = board.meta || {};
@@ -422,8 +425,16 @@ async function loadStatusBoard() {
 
     invoicePlanState.items = []
       .concat(statusBoardState.endMonth)
+      .concat(statusBoardState.waitingFailed)
       .concat(statusBoardState.waitingRecent)
       .concat(statusBoardState.waitingOverdue);
+
+    waitingResendSelectedIds = new Set(
+      statusBoardState.waitingFailed
+        .filter((item) => !!item.default_selected_for_resend)
+        .map((item) => Number(item.id))
+        .filter((id) => Number.isFinite(id) && id > 0)
+    );
 
     renderInvoicePlanBoard();
     updateMetricsByPeriod();
@@ -436,21 +447,24 @@ async function loadStatusBoard() {
 function renderInvoicePlanBoard() {
   const projectsContainer = document.getElementById('kanban-projects');
   const endMonthContainer = document.getElementById('kanban-end-month');
+  const waitingFailedContainer = document.getElementById('kanban-waiting-failed');
   const waitingRecentContainer = document.getElementById('kanban-waiting-recent');
   const waitingOverdueContainer = document.getElementById('kanban-waiting-overdue');
 
-  if (!projectsContainer || !endMonthContainer || !waitingRecentContainer || !waitingOverdueContainer) {
+  if (!projectsContainer || !endMonthContainer || !waitingFailedContainer || !waitingRecentContainer || !waitingOverdueContainer) {
     console.warn('Kanban containers not found');
     return;
   }
 
   projectsContainer.innerHTML = '';
   endMonthContainer.innerHTML = '';
+  waitingFailedContainer.innerHTML = '';
   waitingRecentContainer.innerHTML = '';
   waitingOverdueContainer.innerHTML = '';
 
   statusBoardState.projects.forEach((item) => projectsContainer.appendChild(createProjectCard(item)));
   statusBoardState.endMonth.forEach((item) => endMonthContainer.appendChild(createEndMonthCard(item)));
+  statusBoardState.waitingFailed.forEach((item) => waitingFailedContainer.appendChild(createWaitingCard(item, false)));
   statusBoardState.waitingRecent.forEach((item) => waitingRecentContainer.appendChild(createWaitingCard(item, false)));
   statusBoardState.waitingOverdue.forEach((item) => waitingOverdueContainer.appendChild(createWaitingCard(item, true)));
 
@@ -460,7 +474,7 @@ function renderInvoicePlanBoard() {
   const waitingCount = document.getElementById('kanban-waiting-count');
   if (plannedCount) plannedCount.textContent = String(statusBoardState.projects.length);
   if (endMonthCount) endMonthCount.textContent = String(statusBoardState.endMonth.length);
-  if (waitingCount) waitingCount.textContent = String(statusBoardState.waitingRecent.length + statusBoardState.waitingOverdue.length);
+  if (waitingCount) waitingCount.textContent = String(statusBoardState.waitingFailed.length + statusBoardState.waitingRecent.length + statusBoardState.waitingOverdue.length);
 
   if (endMonthDate) {
     const first = statusBoardState.endMonth[0];
@@ -519,18 +533,24 @@ function createEndMonthCard(item) {
 
 function createWaitingCard(item, forceOverdue) {
   const card = document.createElement('div');
-  card.className = `kanban-card ${forceOverdue ? 'overdue' : ''}`;
+  const sendState = String(item.send_state || 'ok_all');
+  const isSendFailed = sendState !== 'ok_all';
+  card.className = `kanban-card ${forceOverdue ? 'overdue' : ''} ${isSendFailed ? 'send-failed' : ''}`.trim();
   const planId = Number(item.id);
   const actionable = Number.isFinite(planId) && planId > 0;
   const isOverdue = forceOverdue || (Number(item.days_since_sent || 0) > Number(item.payment_due_days || 7));
   const paymentLabel = isOverdue ? 'Просрочен' : 'Не оплачен';
+  const checked = waitingResendSelectedIds.has(planId);
+  const channelBadges = isSendFailed ? renderSendChannelBadges(item) : '';
 
   card.innerHTML = `
+    ${actionable ? `<label class="kanban-resend-check"><input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleWaitingResendSelection(${planId}, this.checked)"> Отправить повторно</label>` : ''}
     <h5>${escapeHtml(item.client_name || '—')}</h5>
     <div class="category">Период: ${escapeHtml(item.period_label || '—')}</div>
     <div class="amount">${formatCurrency(Number(item.total_sum || 0))}</div>
     <div class="category">Отправлен: ${escapeHtml(item.sent_date || '—')}</div>
     <div class="category">${Number(item.days_since_sent || 0)} дн. назад выставлен</div>
+    ${channelBadges}
     <div class="status status--${isOverdue ? 'error' : 'info'}">${paymentLabel}</div>
     <div class="kanban-card-actions">
       ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="openInvoicePlanEdit(${planId})">Редактировать</button>` : ''}
@@ -540,6 +560,29 @@ function createWaitingCard(item, forceOverdue) {
   `;
 
   return card;
+}
+
+function renderSendChannelBadges(item) {
+  const required = Array.isArray(item.send_channels_required) ? item.send_channels_required : [];
+  const success = new Set(Array.isArray(item.send_channels_success) ? item.send_channels_success : []);
+  if (!required.length) return '';
+  const labels = { email: 'Email', telegram: 'Телеграм', diadoc: 'Диадок' };
+  const html = required.map((ch) => {
+    const cls = success.has(ch) ? 'ok' : 'fail';
+    const title = success.has(ch) ? 'Отправка успешна' : 'Отправка не удалась';
+    return `<span class="send-channel-badge ${cls}" title="${escapeHtml(title)}">${escapeHtml(labels[ch] || ch)}</span>`;
+  }).join('');
+  return `<div class="send-channel-badges">${html}</div>`;
+}
+
+function toggleWaitingResendSelection(planId, checked) {
+  const id = Number(planId);
+  if (!Number.isFinite(id) || id <= 0) return;
+  if (checked) {
+    waitingResendSelectedIds.add(id);
+  } else {
+    waitingResendSelectedIds.delete(id);
+  }
 }
 
 function bindInvoicePlanDnD() {
@@ -575,6 +618,12 @@ function bindStatusActions() {
   if (sendNowBtn && sendNowBtn.dataset.bind !== '1') {
     sendNowBtn.dataset.bind = '1';
     sendNowBtn.addEventListener('click', () => { sendEndMonthNow(); });
+  }
+
+  const resendSelectedBtn = document.getElementById('kanbanWaitingResendBtn');
+  if (resendSelectedBtn && resendSelectedBtn.dataset.bind !== '1') {
+    resendSelectedBtn.dataset.bind = '1';
+    resendSelectedBtn.addEventListener('click', () => { resendSelectedWaitingNow(); });
   }
 }
 
@@ -1261,6 +1310,31 @@ async function sendEndMonthNow() {
   } catch (err) {
     console.error(err);
     showToast('Не удалось выполнить массовую отправку', 'error');
+  }
+}
+
+async function resendSelectedWaitingNow() {
+  const ids = Array.from(waitingResendSelectedIds.values());
+  if (!ids.length) {
+    showToast('Нет выбранных счетов', 'error');
+    return;
+  }
+  if (!confirm(`Повторно отправить ${ids.length} выбранных счетов?`)) return;
+  try {
+    const resp = await fetch('/api.php/finance/invoice-plans/resend-selected', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ plan_ids: ids })
+    });
+    if (!resp.ok) throw new Error('resend selected failed');
+    const data = await resp.json().catch(() => null);
+    const resent = Number(data?.resent || 0);
+    showToast(`Повторно отправлено: ${resent}`, 'success');
+    await loadStatusBoard();
+  } catch (err) {
+    console.error(err);
+    showToast('Не удалось повторно отправить выбранные счета', 'error');
   }
 }
 

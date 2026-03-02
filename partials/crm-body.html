@@ -171,9 +171,14 @@
                         <div class="kanban-column" data-status="sent_waiting_payment">
                             <div class="column-header payment">
                                 <h4>Выставлено, ожидание оплаты</h4>
+                                <div class="kanban-header-actions">
+                                    <button type="button" class="action-btn action-btn--edit kanban-add-btn" id="kanbanWaitingResendBtn" title="Повторно отправить отмеченные">Отправить выбранные</button>
+                                </div>
                                 <span class="count" id="kanban-waiting-count">0</span>
                             </div>
                             <div class="kanban-cards-group">
+                                <div class="kanban-subtitle">Неудачная отправка</div>
+                                <div class="kanban-cards" id="kanban-waiting-failed"></div>
                                 <div class="kanban-subtitle">Последние неоплаченные</div>
                                 <div class="kanban-cards" id="kanban-waiting-recent"></div>
                                 <div class="kanban-subtitle">Просроченные</div>

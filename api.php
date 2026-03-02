@@ -262,6 +262,15 @@ if ($resource === 'auth') {
         }
     }
 
+    // /api.php/finance/invoice-plans/resend-selected
+    if ($param1 === 'invoice-plans' && $param2 === 'resend-selected') {
+        if ($method === 'POST') {
+            $controller->invoicePlansResendSelected();
+        } else {
+            sendError('NOT_FOUND', 'Маршрут не найден', 404);
+        }
+    }
+
     // /api.php/finance/invoice-plans/{id}
     if ($param1 === 'invoice-plans' && $param2 !== null && ctype_digit($param2)) {
         $id = (int)$param2;

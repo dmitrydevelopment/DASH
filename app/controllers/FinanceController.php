@@ -18,6 +18,7 @@ class FinanceController
     private $settingsColumns = null;
     private $invoicePlanColumns = null;
     private $bankOperationColumns = null;
+    private $sendFailuresTableExists = null;
     private $lastBankOperationWasInsert = false;
 
     public function __construct(mysqli $db)
@@ -177,6 +178,7 @@ class FinanceController
         $invoiceSums = $this->plans->getClientInvoiceSums($clientIds);
 
         $endMonth = [];
+        $waitingFailed = [];
         $waitingRecent = [];
         $waitingOverdue = [];
 
@@ -212,6 +214,16 @@ class FinanceController
             }
 
             if (($row['status'] ?? '') === 'sent_waiting_payment') {
+                $sendState = $this->buildInvoiceSendState($row);
+                $row['send_state'] = $sendState['send_state'];
+                $row['send_channels_required'] = $sendState['send_channels_required'];
+                $row['send_channels_success'] = $sendState['send_channels_success'];
+                $row['send_channels_failed'] = $sendState['send_channels_failed'];
+                $row['default_selected_for_resend'] = $sendState['default_selected_for_resend'];
+                if ($sendState['send_state'] !== 'ok_all') {
+                    $waitingFailed[] = $row;
+                    continue;
+                }
                 if ((int)$row['days_since_sent'] > $paymentDueDays) {
                     $waitingOverdue[] = $row;
                 } else {
@@ -233,6 +245,7 @@ class FinanceController
             }
             return $bTs <=> $aTs;
         };
+        usort($waitingFailed, $sortBySentAtDesc);
         usort($waitingRecent, $sortBySentAtDesc);
         usort($waitingOverdue, $sortBySentAtDesc);
 
@@ -292,6 +305,7 @@ class FinanceController
             'data' => [
                 'projects_in_work' => $projectsOut,
                 'end_month' => $endMonth,
+                'waiting_failed' => $waitingFailed,
                 'waiting_recent' => $waitingRecent,
                 'waiting_overdue' => $waitingOverdue,
                 'meta' => [
@@ -889,6 +903,12 @@ class FinanceController
         } elseif ($hasPaidStatus) {
             $where[] = "(d.paid_status IS NULL OR d.paid_status <> 'paid')";
         }
+        $where[] = "EXISTS (
+            SELECT 1
+            FROM finance_send_events ev
+            WHERE ev.document_id = d.id
+              AND ev.status = 'success'
+        )";
 
         $types = '';
         $params = [];
@@ -1280,6 +1300,81 @@ class FinanceController
         ]);
     }
 
+    public function invoicePlansResendSelected()
+    {
+        Auth::requireAuth();
+        $payload = getJsonPayload();
+        $rawIds = isset($payload['plan_ids']) && is_array($payload['plan_ids']) ? $payload['plan_ids'] : [];
+        $ids = [];
+        foreach ($rawIds as $v) {
+            $id = (int)$v;
+            if ($id > 0) {
+                $ids[$id] = true;
+            }
+        }
+        $ids = array_keys($ids);
+        if (empty($ids)) {
+            sendError('VALIDATION_ERROR', 'Не выбраны счета для повторной отправки', 422);
+        }
+
+        $items = [];
+        $failedForTrigger = [];
+        $resent = 0;
+        foreach ($ids as $id) {
+            $plan = $this->plans->find((int)$id);
+            if (!$plan) {
+                $items[] = ['plan_id' => $id, 'ok' => false, 'error' => 'Карточка не найдена'];
+                continue;
+            }
+            if (($plan['status'] ?? '') !== 'sent_waiting_payment') {
+                $items[] = ['plan_id' => $id, 'ok' => false, 'error' => 'Карточка не в статусе ожидания оплаты'];
+                continue;
+            }
+            $documentId = (int)($plan['document_id'] ?? 0);
+            if ($documentId <= 0) {
+                $items[] = ['plan_id' => $id, 'ok' => false, 'error' => 'У карточки нет привязанного счета'];
+                continue;
+            }
+
+            $sendPayload = $this->buildPlanPayloadFromStoredData($plan, true);
+            $delivery = $this->processInvoiceChannelDelivery($plan, $id, $documentId, $sendPayload, true);
+            $items[] = [
+                'plan_id' => $id,
+                'document_id' => $documentId,
+                'ok' => empty($delivery['send_channels_failed']),
+                'send_state' => (string)($delivery['send_state'] ?? 'failed_all'),
+                'send_channels_required' => array_values($delivery['send_channels_required'] ?? []),
+                'send_channels_success' => array_values($delivery['send_channels_success'] ?? []),
+                'send_channels_failed' => array_values($delivery['send_channels_failed'] ?? []),
+            ];
+            if (empty($delivery['send_channels_failed'])) {
+                $resent++;
+            } else {
+                $failedForTrigger[] = [
+                    'plan_id' => $id,
+                    'document_id' => $documentId,
+                    'client_name' => (string)($plan['client_name'] ?? ''),
+                    'failed_channels' => array_values($delivery['send_channels_failed'] ?? []),
+                ];
+            }
+        }
+
+        if (!empty($failedForTrigger)) {
+            $this->dispatchNotificationTriggerEvent('finance.invoice.send_failed', [
+                'count' => count($failedForTrigger),
+                'items' => $failedForTrigger,
+                'source' => 'resend_selected',
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+
+        sendJson([
+            'ok' => true,
+            'resent' => $resent,
+            'items' => $items,
+        ]);
+    }
+
     private function performInvoicePlanSend(array $plan, int $id, array $payload)
     {
         $result = $this->sendInvoicePlanInternal($plan, $id, $payload);
@@ -1344,30 +1439,252 @@ class FinanceController
             throw new RuntimeException('Не удалось перевести счет в статус ожидания оплаты');
         }
 
-        if ($email !== '') {
-            $this->plans->insertSendEvent($documentId, 'email', $email, 'success', null);
-        } else {
-            $this->plans->insertSendEvent($documentId, 'email', '', 'skipped', 'Email is empty');
-        }
-
-        if ($sendTelegram && !empty($plan['chat_id'])) {
-            $this->plans->insertSendEvent($documentId, 'telegram', (string)$plan['chat_id'], 'success', null);
-        } else {
-            $this->plans->insertSendEvent($documentId, 'telegram', (string)($plan['chat_id'] ?? ''), 'skipped', 'Telegram disabled or chat_id empty');
-        }
-
-        if ($sendDiadoc && (int)($plan['send_invoice_diadoc'] ?? 0) === 1) {
-            $this->plans->insertSendEvent($documentId, 'diadoc', (string)($plan['diadoc_box_id'] ?? ''), 'success', null);
-        } else {
-            $this->plans->insertSendEvent($documentId, 'diadoc', (string)($plan['diadoc_box_id'] ?? ''), 'skipped', 'Diadoc disabled');
+        $delivery = $this->processInvoiceChannelDelivery($plan, $id, $documentId, [
+            'email' => $email,
+            'send_telegram' => $sendTelegram,
+            'send_diadoc' => $sendDiadoc,
+        ], false);
+        $this->dispatchNotificationTriggerEvent('finance.invoice.created', [
+            'plan_id' => $id,
+            'document_id' => $documentId,
+            'client_id' => (int)($plan['client_id'] ?? 0),
+            'client_name' => (string)($plan['client_name'] ?? ''),
+            'amount' => (float)$total,
+            'created_at' => date('Y-m-d H:i:s'),
+        ]);
+        if (!empty($delivery['send_channels_failed'])) {
+            $this->dispatchNotificationTriggerEvent('finance.invoice.send_failed', [
+                'count' => 1,
+                'items' => [[
+                    'plan_id' => $id,
+                    'document_id' => $documentId,
+                    'client_name' => (string)($plan['client_name'] ?? ''),
+                    'failed_channels' => array_values($delivery['send_channels_failed']),
+                ]],
+                'source' => 'invoice_create',
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
         }
 
         return [
             'ok' => true,
             'plan_id' => $id,
             'status' => 'sent_waiting_payment',
-            'document_id' => $documentId
+            'document_id' => $documentId,
+            'send_state' => (string)($delivery['send_state'] ?? 'failed_all'),
+            'send_channels_required' => array_values($delivery['send_channels_required'] ?? []),
+            'send_channels_success' => array_values($delivery['send_channels_success'] ?? []),
+            'send_channels_failed' => array_values($delivery['send_channels_failed'] ?? []),
         ];
+    }
+
+    private function processInvoiceChannelDelivery(array $plan, int $planId, int $documentId, array $payload, bool $isResend)
+    {
+        $channels = $this->extractRequiredSendChannels($plan, $payload);
+        $required = $channels['required'];
+        $success = [];
+        $failed = [];
+
+        if (in_array('email', $required, true)) {
+            $email = (string)($channels['email'] ?? '');
+            if ($email !== '') {
+                $this->plans->insertSendEvent($documentId, 'email', $email, 'success', null);
+                $success[] = 'email';
+            } else {
+                $error = 'Email is empty';
+                $this->plans->insertSendEvent($documentId, 'email', '', 'failed', $error);
+                $this->logSendFailure($documentId, $planId, 'email', 'EMPTY_EMAIL', $error);
+                $failed[] = 'email';
+            }
+        }
+
+        if (in_array('telegram', $required, true)) {
+            $chatId = trim((string)($plan['chat_id'] ?? ''));
+            if ($chatId !== '') {
+                $this->plans->insertSendEvent($documentId, 'telegram', $chatId, 'success', null);
+                $success[] = 'telegram';
+            } else {
+                $error = 'Telegram chat_id is empty';
+                $this->plans->insertSendEvent($documentId, 'telegram', '', 'failed', $error);
+                $this->logSendFailure($documentId, $planId, 'telegram', 'EMPTY_CHAT_ID', $error);
+                $failed[] = 'telegram';
+            }
+        }
+
+        if (in_array('diadoc', $required, true)) {
+            $boxId = trim((string)($plan['diadoc_box_id'] ?? ''));
+            if ($boxId !== '') {
+                $this->plans->insertSendEvent($documentId, 'diadoc', $boxId, 'success', null);
+                $success[] = 'diadoc';
+            } else {
+                $error = 'Diadoc box_id is empty';
+                $this->plans->insertSendEvent($documentId, 'diadoc', '', 'failed', $error);
+                $this->logSendFailure($documentId, $planId, 'diadoc', 'EMPTY_DIADOC_BOX', $error);
+                $failed[] = 'diadoc';
+            }
+        }
+
+        $sendState = $this->resolveSendState($required, $success);
+        return [
+            'is_resend' => $isResend ? 1 : 0,
+            'send_state' => $sendState,
+            'send_channels_required' => $required,
+            'send_channels_success' => $success,
+            'send_channels_failed' => $failed,
+            'default_selected_for_resend' => ($sendState !== 'ok_all'),
+        ];
+    }
+
+    private function buildInvoiceSendState(array $planRow)
+    {
+        $channels = $this->extractRequiredSendChannels($planRow, []);
+        $required = $channels['required'];
+        $documentId = (int)($planRow['document_id'] ?? 0);
+        $successMap = $this->getSendSuccessMapByDocumentId($documentId);
+        $success = [];
+        foreach ($required as $channel) {
+            if (!empty($successMap[$channel])) {
+                $success[] = $channel;
+            }
+        }
+
+        $failed = [];
+        foreach ($required as $channel) {
+            if (!in_array($channel, $success, true)) {
+                $failed[] = $channel;
+            }
+        }
+
+        $sendState = $this->resolveSendState($required, $success);
+        return [
+            'send_state' => $sendState,
+            'send_channels_required' => $required,
+            'send_channels_success' => $success,
+            'send_channels_failed' => $failed,
+            'default_selected_for_resend' => ($sendState !== 'ok_all'),
+        ];
+    }
+
+    private function resolveSendState(array $required, array $success)
+    {
+        if (empty($required) || empty($success)) {
+            return 'failed_all';
+        }
+        if (count($success) < count($required)) {
+            return 'failed_partial';
+        }
+        return 'ok_all';
+    }
+
+    private function extractRequiredSendChannels(array $planRow, array $payload)
+    {
+        $channels = json_decode((string)($planRow['channels_json'] ?? '{}'), true);
+        if (!is_array($channels)) {
+            $channels = [];
+        }
+
+        $email = isset($payload['email'])
+            ? trim((string)$payload['email'])
+            : trim((string)($channels['email'] ?? ($planRow['email'] ?? '')));
+
+        $sendTelegram = array_key_exists('send_telegram', $payload)
+            ? !empty($payload['send_telegram'])
+            : (!empty($channels['send_telegram']) || (int)($planRow['send_invoice_telegram'] ?? 0) === 1);
+
+        $sendDiadoc = array_key_exists('send_diadoc', $payload)
+            ? !empty($payload['send_diadoc'])
+            : (!empty($channels['send_diadoc']) || (int)($planRow['send_invoice_diadoc'] ?? 0) === 1);
+
+        $required = [];
+        if ($email !== '') {
+            $required[] = 'email';
+        }
+        if ($sendTelegram) {
+            $required[] = 'telegram';
+        }
+        if ($sendDiadoc) {
+            $required[] = 'diadoc';
+        }
+
+        return [
+            'email' => $email,
+            'send_telegram' => $sendTelegram ? 1 : 0,
+            'send_diadoc' => $sendDiadoc ? 1 : 0,
+            'required' => array_values(array_unique($required)),
+        ];
+    }
+
+    private function getSendSuccessMapByDocumentId($documentId)
+    {
+        $map = [];
+        $documentId = (int)$documentId;
+        if ($documentId <= 0) {
+            return $map;
+        }
+
+        $stmt = $this->db->prepare(
+            "SELECT channel
+             FROM finance_send_events
+             WHERE document_id = ? AND status = 'success'
+             GROUP BY channel"
+        );
+        if (!$stmt) {
+            return $map;
+        }
+        $stmt->bind_param('i', $documentId);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        while ($res && ($row = $res->fetch_assoc())) {
+            $channel = trim((string)($row['channel'] ?? ''));
+            if ($channel !== '') {
+                $map[$channel] = true;
+            }
+        }
+        $stmt->close();
+        return $map;
+    }
+
+    private function logSendFailure($documentId, $planId, $channel, $errorCode, $errorMessage)
+    {
+        if (!$this->hasSendFailuresTable()) {
+            return;
+        }
+
+        $documentId = (int)$documentId;
+        $planId = (int)$planId;
+        $channel = trim((string)$channel);
+        if ($channel === '') {
+            return;
+        }
+
+        $attemptNo = 1;
+        $stmt = $this->db->prepare(
+            "SELECT COALESCE(MAX(attempt_no), 0) + 1 AS next_attempt
+             FROM finance_send_failures
+             WHERE document_id = ? AND channel = ?"
+        );
+        if ($stmt) {
+            $stmt->bind_param('is', $documentId, $channel);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $row = $res ? $res->fetch_assoc() : null;
+            $stmt->close();
+            $attemptNo = max(1, (int)($row['next_attempt'] ?? 1));
+        }
+
+        $insert = $this->db->prepare(
+            "INSERT INTO finance_send_failures
+             (document_id, invoice_plan_id, channel, error_code, error_message, attempt_no, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, NOW())"
+        );
+        if (!$insert) {
+            return;
+        }
+        $errorCode = trim((string)$errorCode);
+        $errorMessage = trim((string)$errorMessage);
+        $insert->bind_param('iisssi', $documentId, $planId, $channel, $errorCode, $errorMessage, $attemptNo);
+        $insert->execute();
+        $insert->close();
     }
 
     public function invoicePlansRemind($id)
@@ -1910,6 +2227,20 @@ endobj
             }
         }
         return isset($this->invoicePlanColumns[$name]);
+    }
+
+    private function hasSendFailuresTable()
+    {
+        if ($this->sendFailuresTableExists !== null) {
+            return $this->sendFailuresTableExists;
+        }
+        $res = $this->db->query("SHOW TABLES LIKE 'finance_send_failures'");
+        $ok = $res && $res->num_rows > 0;
+        if ($res) {
+            $res->close();
+        }
+        $this->sendFailuresTableExists = $ok;
+        return $ok;
     }
 
     private function repairMissingInvoicePlansFromDocuments()
