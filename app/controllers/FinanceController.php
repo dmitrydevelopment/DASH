@@ -4,6 +4,8 @@ require_once APP_BASE_PATH . '/app/models/FinanceDocumentModel.php';
 require_once APP_BASE_PATH . '/app/models/FinanceSendEventModel.php';
 require_once APP_BASE_PATH . '/app/models/InvoicePlanModel.php';
 require_once APP_BASE_PATH . '/app/models/FinanceProjectModel.php';
+require_once APP_BASE_PATH . '/app/models/SettingsModel.php';
+require_once APP_BASE_PATH . '/app/services/Finance/EmailService.php';
 
 class FinanceController
 {
@@ -797,45 +799,62 @@ class FinanceController
         $raw = file_get_contents('php://input');
         $payload = json_decode((string)$raw, true);
         if (!is_array($payload)) {
-            sendError('BAD_PAYLOAD', 'Некорректный JSON webhook', 400);
+            $this->notifyAdminAboutTbankWebhook((string)$raw, null, 'Некорректный JSON webhook');
+            sendJson([
+                'ok' => false,
+                'saved' => 0,
+                'matched' => 0,
+                'error' => 'Некорректный JSON webhook',
+            ]);
         }
 
-        $ops = [];
-        if (isset($payload['operations']) && is_array($payload['operations'])) {
-            $ops = $payload['operations'];
-        } elseif (isset($payload['data']['operations']) && is_array($payload['data']['operations'])) {
-            $ops = $payload['data']['operations'];
-        } elseif (isset($payload[0]) && is_array($payload[0])) {
-            $ops = $payload;
-        } else {
-            $ops = [$payload];
-        }
+        $this->notifyAdminAboutTbankWebhook((string)$raw, $payload, '');
 
-        $saved = 0;
-        $matched = 0;
-        foreach ($ops as $op) {
-            if (!is_array($op)) continue;
-            $operationId = $this->upsertBankOperation($op);
-            if ($operationId === '') continue;
-            $saved++;
-            $isMatched = $this->autoMatchBankOperation($operationId);
-            if ($isMatched) {
-                $matched++;
-            } elseif ($this->lastBankOperationWasInsert) {
-                $this->dispatchNotificationTriggerEvent('finance.unknown_payment.created', [
-                    'operation_id' => $operationId,
-                    'amount' => (float)($op['amount'] ?? 0),
-                    'raw_operation' => $op,
-                    'created_at' => date('Y-m-d H:i:s'),
-                ]);
+        try {
+            $ops = [];
+            if (isset($payload['operations']) && is_array($payload['operations'])) {
+                $ops = $payload['operations'];
+            } elseif (isset($payload['data']['operations']) && is_array($payload['data']['operations'])) {
+                $ops = $payload['data']['operations'];
+            } elseif (isset($payload[0]) && is_array($payload[0])) {
+                $ops = $payload;
+            } else {
+                $ops = [$payload];
             }
-        }
 
-        sendJson([
-            'ok' => true,
-            'saved' => $saved,
-            'matched' => $matched,
-        ]);
+            $saved = 0;
+            $matched = 0;
+            foreach ($ops as $op) {
+                if (!is_array($op)) continue;
+                $operationId = $this->upsertBankOperation($op);
+                if ($operationId === '') continue;
+                $saved++;
+                $isMatched = $this->autoMatchBankOperation($operationId);
+                if ($isMatched) {
+                    $matched++;
+                } elseif ($this->lastBankOperationWasInsert) {
+                    $this->dispatchNotificationTriggerEvent('finance.unknown_payment.created', [
+                        'operation_id' => $operationId,
+                        'amount' => (float)($op['amount'] ?? 0),
+                        'raw_operation' => $op,
+                        'created_at' => date('Y-m-d H:i:s'),
+                    ]);
+                }
+            }
+
+            sendJson([
+                'ok' => true,
+                'saved' => $saved,
+                'matched' => $matched,
+            ]);
+        } catch (Throwable $e) {
+            sendJson([
+                'ok' => false,
+                'saved' => 0,
+                'matched' => 0,
+                'error' => 'Webhook обработан с ошибкой',
+            ]);
+        }
     }
 
     public function receivables()
@@ -2279,6 +2298,59 @@ endobj
             $refs[] = &$params[$k];
         }
         call_user_func_array([$stmt, 'bind_param'], $refs);
+    }
+
+    private function notifyAdminAboutTbankWebhook($rawBody, $payload, $parseError = '')
+    {
+        try {
+            $settings = (new SettingsModel($this->db))->get();
+            $adminEmail = isset($settings['admin_email']) ? trim((string)$settings['admin_email']) : '';
+            if ($adminEmail === '') {
+                return;
+            }
+
+            $fromEmail = isset($settings['finance_email_from_email']) ? trim((string)$settings['finance_email_from_email']) : '';
+            $fromName = isset($settings['finance_email_from_name']) ? trim((string)$settings['finance_email_from_name']) : '';
+            $bcc = isset($settings['finance_email_bcc']) ? trim((string)$settings['finance_email_bcc']) : '';
+
+            $subject = '[DASH] TBank webhook ' . date('Y-m-d H:i:s');
+
+            $headers = [];
+            foreach ($_SERVER as $key => $value) {
+                if (strpos((string)$key, 'HTTP_') !== 0) {
+                    continue;
+                }
+                $headers[$key] = (string)$value;
+            }
+
+            $prettyPayload = '';
+            if (is_array($payload)) {
+                $prettyPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+                if (!is_string($prettyPayload)) {
+                    $prettyPayload = '';
+                }
+            }
+
+            $body = '<h2>TBank webhook</h2>'
+                . '<p><b>Time:</b> ' . htmlspecialchars(date('Y-m-d H:i:s'), ENT_QUOTES, 'UTF-8') . '</p>'
+                . '<p><b>IP:</b> ' . htmlspecialchars($this->getClientIp(), ENT_QUOTES, 'UTF-8') . '</p>'
+                . '<p><b>User-Agent:</b> ' . htmlspecialchars($this->getUserAgent(), ENT_QUOTES, 'UTF-8') . '</p>'
+                . '<p><b>Parse error:</b> ' . htmlspecialchars((string)$parseError, ENT_QUOTES, 'UTF-8') . '</p>'
+                . '<p><b>Request headers:</b></p><pre style="white-space:pre-wrap;">'
+                . htmlspecialchars(json_encode($headers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), ENT_QUOTES, 'UTF-8')
+                . '</pre>'
+                . '<p><b>Raw body:</b></p><pre style="white-space:pre-wrap;">'
+                . htmlspecialchars((string)$rawBody, ENT_QUOTES, 'UTF-8')
+                . '</pre>'
+                . '<p><b>Parsed JSON:</b></p><pre style="white-space:pre-wrap;">'
+                . htmlspecialchars($prettyPayload, ENT_QUOTES, 'UTF-8')
+                . '</pre>';
+
+            $mailer = new EmailService($fromEmail, $fromName, $bcc);
+            $mailer->send($adminEmail, $subject, $body);
+        } catch (Throwable $e) {
+            // Fail silently: webhook endpoint must still return 200.
+        }
     }
 
     private function getClientIp()
