@@ -1,14 +1,28 @@
 <?php
 
 require_once APP_BASE_PATH . '/app/auth/Auth.php';
+require_once APP_BASE_PATH . '/app/models/SettingsModel.php';
 
 class DadataController
 {
-    private $token = 'bda365ae0d4858016cbf5f2c031ef320802930fa';
+    /**
+     * @var SettingsModel
+     */
+    private $settings;
+
+    public function __construct(mysqli $db)
+    {
+        $this->settings = new SettingsModel($db);
+    }
 
     public function partySuggest()
     {
         Auth::requireAuth();
+
+        $token = trim((string) (($this->settings->get()['dadata_token'] ?? '')));
+        if ($token === '') {
+            sendError('DADATA_TOKEN_NOT_SET', 'Не задан токен DaData в настройках', 500);
+        }
 
         $q = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
         if ($q === '' || mb_strlen($q) < 2) {
@@ -30,7 +44,7 @@ class DadataController
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Content-Type: application/json',
             'Accept: application/json',
-            'Authorization: Token ' . $this->token
+            'Authorization: Token ' . $token
         ]);
 
         $raw = curl_exec($ch);

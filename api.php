@@ -178,7 +178,7 @@ if ($resource === 'auth') {
 
 } elseif ($resource === 'dadata') {
 
-    $controller = new DadataController();
+    $controller = new DadataController($db);
 
     // /api.php/dadata/party?q=...
     if ($method === 'GET' && $param1 === 'party') {
