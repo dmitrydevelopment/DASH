@@ -538,8 +538,6 @@ function createWaitingCard(item, forceOverdue) {
   card.className = `kanban-card ${forceOverdue ? 'overdue' : ''} ${isSendFailed ? 'send-failed' : ''}`.trim();
   const planId = Number(item.id);
   const actionable = Number.isFinite(planId) && planId > 0;
-  const isOverdue = forceOverdue || (Number(item.days_since_sent || 0) > Number(item.payment_due_days || 7));
-  const paymentLabel = isOverdue ? 'Просрочен' : 'Не оплачен';
   const checked = waitingResendSelectedIds.has(planId);
   const channelBadges = isSendFailed ? renderSendChannelBadges(item) : '';
 
@@ -551,7 +549,6 @@ function createWaitingCard(item, forceOverdue) {
     <div class="category">Отправлен: ${escapeHtml(item.sent_date || '—')}</div>
     <div class="category">${Number(item.days_since_sent || 0)} дн. назад выставлен</div>
     ${channelBadges}
-    <div class="status status--${isOverdue ? 'error' : 'info'}">${paymentLabel}</div>
     <div class="kanban-card-actions">
       ${actionable ? `<button type="button" class="action-btn action-btn--edit" onclick="openInvoicePlanEdit(${planId})">Редактировать</button>` : ''}
       ${actionable ? `<button type="button" class="action-btn action-btn--delete" onclick="deleteInvoicePlan(${planId})">Удалить</button>` : ''}
