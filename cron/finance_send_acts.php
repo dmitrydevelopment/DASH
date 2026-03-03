@@ -80,10 +80,12 @@ $docs = new FinanceDocumentModel($db);
 $events = new FinanceSendEventModel($db);
 
 $clientSql = "SELECT id, name, legal_name, legal_address, inn, kpp, email, additional_email, telegram_id, chat_id,
-                    send_act_schedule, send_act_telegram, send_act_diadoc
+                    send_invoice_schedule AS send_act_schedule,
+                    send_invoice_telegram AS send_act_telegram,
+                    send_act_diadoc
              FROM clients
              WHERE is_active = 1
-               AND send_act_schedule = 1";
+               AND send_invoice_schedule = 1";
 
 $res = $db->query($clientSql);
 $clients = [];
