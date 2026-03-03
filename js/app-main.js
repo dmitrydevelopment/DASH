@@ -4397,6 +4397,9 @@ if (dadataSearch) dadataSearch.value = '';
 const legalName = document.getElementById('clientReqCompanyName');
 if (legalName) legalName.value = '';
 
+const legalAddress = document.getElementById('clientReqLegalAddress');
+if (legalAddress) legalAddress.value = '';
+
 const inn = document.getElementById('clientReqInn');
 if (inn) inn.value = '';
 
@@ -4463,6 +4466,9 @@ async function editClient(id, type, event) {
 
   const legalName = document.getElementById('clientReqCompanyName');
   if (legalName) legalName.value = client.legal_name || '';
+
+  const legalAddress = document.getElementById('clientReqLegalAddress');
+  if (legalAddress) legalAddress.value = client.legal_address || '';
 
   const inn = document.getElementById('clientReqInn');
   if (inn) inn.value = client.inn || '';
@@ -4702,6 +4708,7 @@ function normalizeCompanyQuotes(str) {
 
       el.addEventListener('click', () => {
         const nameField = document.getElementById('clientReqCompanyName');
+        const legalAddressField = document.getElementById('clientReqLegalAddress');
         const innField = document.getElementById('clientReqInn');
         const kppField = document.getElementById('clientReqKpp');
 
@@ -4709,6 +4716,7 @@ function normalizeCompanyQuotes(str) {
 const fixedName = normalizeCompanyQuotes(rawName);
 
 if (nameField) nameField.value = fixedName;
+if (legalAddressField) legalAddressField.value = item.legal_address || '';
 if (innField) innField.value = item.inn || '';
 if (kppField) kppField.value = item.kpp || '';
 
@@ -5056,6 +5064,7 @@ if (phoneDigits.length !== 11 || phoneDigits[0] !== '7') {
         website: document.getElementById('clientWebsite').value,
 
   legal_name: (document.getElementById('clientReqCompanyName') ? document.getElementById('clientReqCompanyName').value : ''),
+  legal_address: (document.getElementById('clientReqLegalAddress') ? document.getElementById('clientReqLegalAddress').value : ''),
   inn: (document.getElementById('clientReqInn') ? document.getElementById('clientReqInn').value : ''),
   kpp: (document.getElementById('clientReqKpp') ? document.getElementById('clientReqKpp').value : ''),
         telegram_id: document.getElementById('clientTelegramId').value,
@@ -5577,6 +5586,7 @@ if (clientForm) {
         website: document.getElementById('clientWebsite').value,
 
   legal_name: (document.getElementById('clientReqCompanyName') ? document.getElementById('clientReqCompanyName').value : ''),
+  legal_address: (document.getElementById('clientReqLegalAddress') ? document.getElementById('clientReqLegalAddress').value : ''),
   inn: (document.getElementById('clientReqInn') ? document.getElementById('clientReqInn').value : ''),
   kpp: (document.getElementById('clientReqKpp') ? document.getElementById('clientReqKpp').value : ''),
         telegram_id: document.getElementById('clientTelegramId').value,

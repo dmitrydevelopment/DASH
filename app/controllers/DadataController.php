@@ -76,6 +76,9 @@ class DadataController
                 'name'  => $nameFull !== '' ? $nameFull : $value,
                 'inn'   => isset($data['inn']) ? (string)$data['inn'] : '',
                 'kpp'   => isset($data['kpp']) ? (string)$data['kpp'] : '',
+                'legal_address' => isset($data['address']) && is_array($data['address'])
+                    ? (string) (($data['address']['unrestricted_value'] ?? $data['address']['value'] ?? ''))
+                    : '',
             ];
         }
 

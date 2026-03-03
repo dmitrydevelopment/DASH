@@ -79,7 +79,7 @@ $tgSvc = new TelegramService($tgBotToken);
 $docs = new FinanceDocumentModel($db);
 $events = new FinanceSendEventModel($db);
 
-$clientSql = "SELECT id, name, legal_name, inn, kpp, email, additional_email, telegram_id, chat_id,
+$clientSql = "SELECT id, name, legal_name, legal_address, inn, kpp, email, additional_email, telegram_id, chat_id,
                     send_act_schedule, send_act_telegram, send_act_diadoc
              FROM clients
              WHERE is_active = 1
@@ -133,7 +133,21 @@ foreach ($clients as $c) {
         $actNumber = $actPrefix . sprintf('%04d%02d-%d', $year, $month, $clientId);
         $actDate = date('Y-m-d');
 
-        $html = buildActHtml($orgName, $orgInn, $orgKpp, $orgAddress, $orgBank, $clientName, (string) $c['inn'], (string) $c['kpp'], $actNumber, $actDate, $items, $sum);
+        $html = buildActHtml(
+            $orgName,
+            $orgInn,
+            $orgKpp,
+            $orgAddress,
+            $orgBank,
+            $clientName,
+            (string) ($c['legal_address'] ?? ''),
+            (string) $c['inn'],
+            (string) $c['kpp'],
+            $actNumber,
+            $actDate,
+            $items,
+            $sum
+        );
 
         $pdfBytes = renderPdfByDompdf($html);
         if ($pdfBytes === false) {
@@ -294,7 +308,7 @@ foreach ($clients as $c) {
 
 echo "DONE\n";
 
-function buildActHtml($orgName, $orgInn, $orgKpp, $orgAddress, $orgBank, $clientName, $clientInn, $clientKpp, $actNumber, $actDate, array $items, $sum)
+function buildActHtml($orgName, $orgInn, $orgKpp, $orgAddress, $orgBank, $clientName, $clientLegalAddress, $clientInn, $clientKpp, $actNumber, $actDate, array $items, $sum)
 {
     $rows = '';
     $i = 1;
@@ -314,6 +328,7 @@ function buildActHtml($orgName, $orgInn, $orgKpp, $orgAddress, $orgBank, $client
     $orgBankH = nl2br(htmlspecialchars((string) $orgBank, ENT_QUOTES, 'UTF-8'));
 
     $clientNameH = htmlspecialchars((string) $clientName, ENT_QUOTES, 'UTF-8');
+    $clientLegalAddressH = htmlspecialchars((string) $clientLegalAddress, ENT_QUOTES, 'UTF-8');
     $clientInnH = htmlspecialchars((string) $clientInn, ENT_QUOTES, 'UTF-8');
     $clientKppH = htmlspecialchars((string) $clientKpp, ENT_QUOTES, 'UTF-8');
 
@@ -345,7 +360,7 @@ h1 { font-size: 16px; margin: 0 0 10px 0; }
 <br>
 
 <div class=\"small\">
-<strong>Заказчик:</strong> {$clientNameH}<br>
+<strong>Заказчик:</strong> {$clientNameH}" . ($clientLegalAddressH !== '' ? ", {$clientLegalAddressH}" : "") . "<br>
 ИНН: {$clientInnH} " . ($clientKppH !== '' ? " КПП: {$clientKppH}" : "") . "
 </div>
 

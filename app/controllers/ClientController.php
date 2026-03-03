@@ -27,6 +27,7 @@ class ClientController
             'id'                 => (int)$row['id'],
             'name'               => $row['name'],
             'legal_name' => $row['legal_name'],
+'legal_address' => $row['legal_address'],
 'inn'        => $row['inn'],
 'kpp'        => $row['kpp'],
             'diadoc_box_id'      => $row['diadoc_box_id'] ?? null,
@@ -94,6 +95,7 @@ class ClientController
         $data = [
             'name'               => $name,
             'legal_name' => $payload['legal_name'] ?? null,
+'legal_address' => $payload['legal_address'] ?? null,
 'inn'        => $payload['inn'] ?? null,
 'kpp'        => $payload['kpp'] ?? null,
             'diadoc_box_id'      => $payload['diadoc_box_id'] ?? null,
@@ -170,6 +172,7 @@ $client['act_items'] = $this->clients->getActItems((int)$row['id']);
  $data = [
     'name'               => $name,
     'legal_name'         => $payload['legal_name'] ?? null,
+    'legal_address'      => $payload['legal_address'] ?? null,
     'inn'                => $payload['inn'] ?? null,
     'kpp'                => $payload['kpp'] ?? null,
     'diadoc_box_id'        => $payload['diadoc_box_id'] ?? null,

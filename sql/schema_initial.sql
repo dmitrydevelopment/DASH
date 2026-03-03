@@ -35,6 +35,7 @@ CREATE TABLE `clients` (
   `id` int(10) UNSIGNED NOT NULL,
   `name` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   `legal_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `legal_address` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `inn` varchar(12) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `kpp` varchar(9) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `contact_person` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,

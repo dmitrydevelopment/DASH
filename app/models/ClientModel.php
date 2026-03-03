@@ -64,6 +64,7 @@ class ClientModel
     {
         $name           = $this->nullIfEmpty($data['name'] ?? null);
         $legalName      = $this->nullIfEmpty($data['legal_name'] ?? null);
+$legalAddress   = $this->nullIfEmpty($data['legal_address'] ?? null);
 $inn            = $this->nullIfEmpty($data['inn'] ?? null);
 $kpp            = $this->nullIfEmpty($data['kpp'] ?? null);
 $diadocBoxId     = $this->nullIfEmpty($data['diadoc_box_id'] ?? null);
@@ -94,10 +95,10 @@ $sendActDiadoc          = !empty($data['send_act_diadoc']) ? 1 : 0;
         $notes          = $this->nullIfEmpty($data['notes'] ?? null);
         $isActive       = !empty($data['is_active']) ? 1 : 0;
 
-$stmt = $this->db->prepare("
+        $stmt = $this->db->prepare("
     INSERT INTO clients
       (
-        name, legal_name, inn, kpp, diadoc_box_id, diadoc_department_id,
+        name, legal_name, legal_address, inn, kpp, diadoc_box_id, diadoc_department_id,
         contact_person, email, additional_email, phone, industry, website,
         manager_employee_id, tracker_project_id, client_type,
         send_invoice_schedule, invoice_use_end_month_date, send_invoice_telegram, send_invoice_diadoc, send_act_diadoc,
@@ -105,7 +106,7 @@ $stmt = $this->db->prepare("
       )
     VALUES
       (
-        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?,
         NULLIF(?, 0), ?, ?,
         ?, ?, ?, ?, ?,
@@ -117,9 +118,10 @@ if (!$stmt) {
 }
 
 $stmt->bind_param(
-    'ssssssssssssiisiiiiisssi',
+    'ssssssssssssiiisiiiiisssi',
     $name,
     $legalName,
+    $legalAddress,
     $inn,
     $kpp,
     $diadocBoxId,
@@ -155,6 +157,7 @@ $stmt->bind_param(
     {
         $name           = $this->nullIfEmpty($data['name'] ?? null);
         $legalName      = $this->nullIfEmpty($data['legal_name'] ?? null);
+$legalAddress   = $this->nullIfEmpty($data['legal_address'] ?? null);
 $inn            = $this->nullIfEmpty($data['inn'] ?? null);
 $kpp            = $this->nullIfEmpty($data['kpp'] ?? null);
 $diadocBoxId     = $this->nullIfEmpty($data['diadoc_box_id'] ?? null);
@@ -190,6 +193,7 @@ $stmt = $this->db->prepare("
     SET
       name = ?,
       legal_name = ?,
+      legal_address = ?,
       inn = ?,
       kpp = ?,
       diadoc_box_id = ?,
@@ -219,9 +223,10 @@ if (!$stmt) {
 }
 
 $stmt->bind_param(
-    'ssssssssssssiisiiiiisssii',
+    'ssssssssssssiiisiiiiisssii',
     $name,
     $legalName,
+    $legalAddress,
     $inn,
     $kpp,
     $diadocBoxId,
