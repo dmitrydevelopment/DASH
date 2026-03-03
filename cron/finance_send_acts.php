@@ -97,44 +97,121 @@ echo "CLIENTS=" . count($clients) . "\n";
 
 foreach ($clients as $c) {
     $clientId = (int) $c['id'];
+    list($items, $sum) = loadClientActItemsAndSum($db, $clientId);
+    if (!$items) {
+        echo "SKIP client_id={$clientId} NO_ITEMS\n";
+        continue;
+    }
 
-    $doc = $docs->findByPeriod('act', $clientId, $year, $month);
+    $orgName = isset($settings['finance_legal_name']) ? (string) $settings['finance_legal_name'] : '';
+    $orgInn = isset($settings['finance_legal_inn']) ? (string) $settings['finance_legal_inn'] : '';
+    $orgKpp = isset($settings['finance_legal_kpp']) ? (string) $settings['finance_legal_kpp'] : '';
+    $orgAddress = isset($settings['finance_legal_address']) ? (string) $settings['finance_legal_address'] : '';
+    $orgBank = isset($settings['finance_legal_bank_details']) ? (string) $settings['finance_legal_bank_details'] : '';
 
-    if (!$doc) {
-        // Генерируем HTML акта из данных.
-        $items = [];
-        $sum = 0;
+    $clientName = $c['legal_name'] ? (string) $c['legal_name'] : (string) $c['name'];
+    $actNumber = $actPrefix . sprintf('%04d%02d-%d', $year, $month, $clientId);
+    $actDate = date('Y-m-d');
+    $onlyDiadoc = !empty($c['send_act_diadoc']);
 
-        $stmt = $db->prepare("SELECT service_name, service_amount FROM client_act_items WHERE client_id = ? ORDER BY sort_order ASC, id ASC");
-        $stmt->bind_param("i", $clientId);
-        $stmt->execute();
-        $r = $stmt->get_result();
-        while ($it = $r->fetch_assoc()) {
-            $amount = (float) $it['service_amount'];
-            $items[] = [
-                'name' => (string) $it['service_name'],
-                'amount' => $amount,
-            ];
-            $sum += $amount;
-        }
-        $stmt->close();
-
-        if (!$items) {
-            echo "SKIP client_id={$clientId} NO_ITEMS\n";
+    if ($onlyDiadoc) {
+        if (empty($c['inn'])) {
+            echo "SKIP client_id={$clientId} DIADOC_NO_INN\n";
             continue;
         }
 
-        $orgName = isset($settings['finance_legal_name']) ? (string) $settings['finance_legal_name'] : '';
-        $orgInn = isset($settings['finance_legal_inn']) ? (string) $settings['finance_legal_inn'] : '';
-        $orgKpp = isset($settings['finance_legal_kpp']) ? (string) $settings['finance_legal_kpp'] : '';
-        $orgAddress = isset($settings['finance_legal_address']) ? (string) $settings['finance_legal_address'] : '';
-        $orgBank = isset($settings['finance_legal_bank_details']) ? (string) $settings['finance_legal_bank_details'] : '';
+        $doc = $docs->findByPeriod('act', $clientId, $year, $month);
+        if (!$doc) {
+            $docId = $docs->insert([
+                'doc_type' => 'act',
+                'client_id' => $clientId,
+                'period_year' => $year,
+                'period_month' => $month,
+                'doc_number' => $actNumber,
+                'doc_date' => $actDate,
+                'total_sum' => (float) $sum,
+                'currency' => 'RUB',
+                'file_rel_path' => '',
+                'file_name' => '',
+                'file_size' => 0,
+                'file_sha256' => '',
+                'download_token' => bin2hex(random_bytes(24)),
+            ]);
+            $doc = $docs->findByPeriod('act', $clientId, $year, $month);
+            if (!$doc) {
+                echo "DOC_SAVE_FAIL client_id={$clientId}\n";
+                continue;
+            }
+            echo "DOC_CREATED_UDP client_id={$clientId} doc_id={$docId}\n";
+        } else {
+            echo "DOC_EXISTS_UDP client_id={$clientId} doc_id={$doc['id']}\n";
+        }
 
-        $clientName = $c['legal_name'] ? (string) $c['legal_name'] : (string) $c['name'];
+        $docId = (int) $doc['id'];
+        $recipientInn = (string) $c['inn'];
+        $ev = $events->getOrCreate($docId, 'diadoc', $recipientInn);
 
-        $actNumber = $actPrefix . sprintf('%04d%02d-%d', $year, $month, $clientId);
-        $actDate = date('Y-m-d');
+        $attempts = isset($ev['attempts']) ? (int) $ev['attempts'] : 0;
+        $status = isset($ev['status']) ? (string) $ev['status'] : 'pending';
+        if ($status === 'success' || $attempts >= $MAX_RETRY_ATTEMPTS) {
+            continue;
+        }
 
+        $updHtml = buildUpdHtml(
+            $orgName,
+            $orgInn,
+            $orgKpp,
+            $orgAddress,
+            $orgBank,
+            $clientName,
+            (string) ($c['legal_address'] ?? ''),
+            (string) $c['inn'],
+            (string) $c['kpp'],
+            (string) $doc['doc_number'],
+            (string) $doc['doc_date'],
+            $items,
+            (float) $doc['total_sum']
+        );
+        $updBytes = renderPdfByDompdf($updHtml);
+        if ($updBytes === false) {
+            $events->markFail((int) $ev['id'], 'UPD_PDF_BUILD_FAIL', '');
+            echo "UPD_BUILD_FAIL client_id={$clientId}\n";
+            continue;
+        }
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'upd_pdf_');
+        if ($tmpPath === false || file_put_contents($tmpPath, $updBytes) === false) {
+            if (is_string($tmpPath) && $tmpPath !== '' && is_file($tmpPath)) {
+                @unlink($tmpPath);
+            }
+            $events->markFail((int) $ev['id'], 'UPD_TEMP_FILE_FAIL', '');
+            echo "UPD_TEMP_FAIL client_id={$clientId}\n";
+            continue;
+        }
+
+        $updFileName = 'УДП_' . FinanceFileStorage::sanitizeFileName($clientName) . '_' . date('dmY') . '.pdf';
+        $send = $diadoc->sendUpdPdf(
+            $recipientInn,
+            $updFileName,
+            $tmpPath,
+            (string) $doc['doc_date'],
+            (int) round((float) $doc['total_sum']),
+            (string) $doc['doc_number']
+        );
+        @unlink($tmpPath);
+
+        if ($send[0]) {
+            $events->markSuccess((int) $ev['id'], is_string($send[2]) ? $send[2] : '');
+            echo "DIADOC_UPD_OK client_id={$clientId}\n";
+        } else {
+            $events->markFail((int) $ev['id'], $send[1], is_string($send[2]) ? $send[2] : '');
+            echo "DIADOC_UPD_FAIL client_id={$clientId} err={$send[1]}\n";
+        }
+        continue;
+    }
+
+    $doc = $docs->findByPeriod('act', $clientId, $year, $month);
+    if (!$doc) {
         $html = buildActHtml(
             $orgName,
             $orgInn,
@@ -159,9 +236,6 @@ foreach ($clients as $c) {
 
         $fileName = 'Акт_' . FinanceFileStorage::sanitizeFileName($clientName) . '_' . date('dmY') . '.pdf';
         $saved = FinanceFileStorage::savePdfBytes('act', $year, $month, $fileName, $pdfBytes);
-
-        $downloadToken = bin2hex(random_bytes(24));
-
         $docId = $docs->insert([
             'doc_type' => 'act',
             'client_id' => $clientId,
@@ -175,15 +249,13 @@ foreach ($clients as $c) {
             'file_name' => $saved['file_name'],
             'file_size' => (int) $saved['size'],
             'file_sha256' => (string) $saved['sha256'],
-            'download_token' => $downloadToken,
+            'download_token' => bin2hex(random_bytes(24)),
         ]);
-
         $doc = $docs->findByPeriod('act', $clientId, $year, $month);
         if (!$doc) {
             echo "DOC_SAVE_FAIL client_id={$clientId}\n";
             continue;
         }
-
         echo "DOC_CREATED client_id={$clientId} doc_id={$docId}\n";
     } else {
         echo "DOC_EXISTS client_id={$clientId} doc_id={$doc['id']}\n";
@@ -199,37 +271,6 @@ foreach ($clients as $c) {
     $downloadUrl = '';
     if ($publicUrl !== '' && !empty($doc['download_token'])) {
         $downloadUrl = $publicUrl . '/api.php/finance/download?token=' . urlencode((string) $doc['download_token']);
-    }
-
-    $onlyDiadoc = !empty($c['send_act_diadoc']);
-
-    // Если отмечено отправлять акт в Диадок, то отправляем только в Диадок.
-    if ($onlyDiadoc && !empty($c['inn'])) {
-        $recipientInn = (string) $c['inn'];
-        $ev = $events->getOrCreate($docId, 'diadoc', $recipientInn);
-
-        $attempts = isset($ev['attempts']) ? (int) $ev['attempts'] : 0;
-        $status = isset($ev['status']) ? (string) $ev['status'] : 'pending';
-
-        if ($status !== 'success' && $attempts < $MAX_RETRY_ATTEMPTS) {
-            $send = $diadoc->sendActPdf(
-                $recipientInn,
-                (string) (isset($doc['file_name']) ? $doc['file_name'] : basename($absPath)),
-                $absPath,
-                (string) $doc['doc_date'],
-                (int) round((float) $doc['total_sum']),
-                (string) $doc['doc_number']
-            );
-
-            if ($send[0]) {
-                $events->markSuccess((int) $ev['id'], is_string($send[2]) ? $send[2] : '');
-                echo "DIADOC_OK client_id={$clientId}\n";
-            } else {
-                $events->markFail((int) $ev['id'], $send[1], is_string($send[2]) ? $send[2] : '');
-                echo "DIADOC_FAIL client_id={$clientId} err={$send[1]}\n";
-            }
-        }
-        continue;
     }
 
     // Email (если есть email).
@@ -393,6 +434,52 @@ h1 { font-size: 16px; margin: 0 0 10px 0; }
 
 </body>
 </html>";
+}
+
+function buildUpdHtml($orgName, $orgInn, $orgKpp, $orgAddress, $orgBank, $clientName, $clientLegalAddress, $clientInn, $clientKpp, $updNumber, $updDate, array $items, $sum)
+{
+    $html = buildActHtml(
+        $orgName,
+        $orgInn,
+        $orgKpp,
+        $orgAddress,
+        $orgBank,
+        $clientName,
+        $clientLegalAddress,
+        $clientInn,
+        $clientKpp,
+        $updNumber,
+        $updDate,
+        $items,
+        $sum
+    );
+
+    return str_replace('Акт №', 'УДП №', $html);
+}
+
+function loadClientActItemsAndSum(mysqli $db, int $clientId): array
+{
+    $items = [];
+    $sum = 0.0;
+
+    $stmt = $db->prepare("SELECT service_name, service_amount FROM client_act_items WHERE client_id = ? ORDER BY sort_order ASC, id ASC");
+    if (!$stmt) {
+        return [[], 0.0];
+    }
+    $stmt->bind_param("i", $clientId);
+    $stmt->execute();
+    $r = $stmt->get_result();
+    while ($r && ($it = $r->fetch_assoc())) {
+        $amount = (float) $it['service_amount'];
+        $items[] = [
+            'name' => (string) $it['service_name'],
+            'amount' => $amount,
+        ];
+        $sum += $amount;
+    }
+    $stmt->close();
+
+    return [$items, $sum];
 }
 
 function renderPdfByDompdf($html)

@@ -96,6 +96,19 @@ class DiadocService
         );
     }
 
+    public function sendUpdPdf($counteragentInn, $fileName, $fileAbsPath, $documentDateYmd, $totalSumInt, $documentNumber)
+    {
+        return $this->sendPdfByTypeNamedId(
+            'UniversalTransferDocument',
+            (string) $counteragentInn,
+            (string) $fileName,
+            (string) $fileAbsPath,
+            (string) $documentDateYmd,
+            (int) $totalSumInt,
+            (string) $documentNumber
+        );
+    }
+
     private function sendPdfByTypeNamedId($typeNamedId, $counteragentInn, $fileName, $fileAbsPath, $documentDateYmd, $totalSumInt, $documentNumber)
     {
         $auth = $this->ensureAuth();

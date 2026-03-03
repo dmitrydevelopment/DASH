@@ -1119,6 +1119,11 @@ class FinanceController
 
         $sql = "SELECT d.id, d.client_id, c.name AS client_name, d.period_year, d.period_month, d.doc_date,
                        d.download_token, d.doc_number,
+                       c.send_act_diadoc,
+                       EXISTS (
+                           SELECT 1 FROM finance_send_events ev
+                           WHERE ev.document_id = d.id AND ev.channel = 'diadoc' AND ev.status = 'success'
+                       ) AS has_diadoc_success_send,
                        EXISTS (
                            SELECT 1 FROM finance_send_events ev
                            WHERE ev.document_id = d.id AND ev.status = 'success'
@@ -1146,6 +1151,9 @@ class FinanceController
                 'doc_date' => (string)($row['doc_date'] ?? ''),
                 'doc_number' => (string)($row['doc_number'] ?? ''),
                 'status' => ((int)($row['has_success_send'] ?? 0) === 1) ? 'Отправлен' : 'Создан',
+                'act_delivery_kind' => ((int)($row['send_act_diadoc'] ?? 0) === 1 && (int)($row['has_diadoc_success_send'] ?? 0) === 1)
+                    ? 'udp'
+                    : 'pdf',
                 'act_download_url' => !empty($row['download_token'])
                     ? '/api.php/finance/download?token=' . rawurlencode((string)$row['download_token'])
                     : null,

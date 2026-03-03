@@ -8041,7 +8041,7 @@ function renderActsTableFromApi(items) {
           <th>Период</th>
           <th>Дата</th>
           <th>Клиент</th>
-          <th>Акт PDF</th>
+          <th>Акты и УДП</th>
           <th>Статус</th>
         </tr>
       </thead>
@@ -8051,7 +8051,7 @@ function renderActsTableFromApi(items) {
             <td>${escapeHtml(a.period_label || '—')}</td>
             <td>${a.doc_date ? new Date(a.doc_date).toLocaleDateString('ru-RU') : '—'}</td>
             <td>${escapeHtml(a.client_name || '—')}</td>
-            <td>${a.act_download_url ? `<a href="${escapeHtml(a.act_download_url)}" target="_blank" rel="noopener">PDF</a>` : '—'}</td>
+            <td>${a.act_delivery_kind === 'udp' ? 'УДП' : (a.act_download_url ? `<a href="${escapeHtml(a.act_download_url)}" target="_blank" rel="noopener">PDF</a>` : '—')}</td>
             <td>${escapeHtml(a.status || '—')}</td>
           </tr>
         `).join('')}
