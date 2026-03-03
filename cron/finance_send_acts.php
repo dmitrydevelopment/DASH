@@ -157,48 +157,20 @@ foreach ($clients as $c) {
             continue;
         }
 
-        $updHtml = buildUpdHtml(
-            $orgName,
-            $orgInn,
-            $orgKpp,
-            $orgAddress,
-            $orgBank,
-            $clientName,
-            (string) ($c['legal_address'] ?? ''),
-            (string) $c['inn'],
-            (string) $c['kpp'],
-            (string) $doc['doc_number'],
-            (string) $doc['doc_date'],
-            $items,
-            (float) $doc['total_sum']
-        );
-        $updBytes = renderPdfByDompdf($updHtml);
-        if ($updBytes === false) {
-            $events->markFail((int) $ev['id'], 'UPD_PDF_BUILD_FAIL', '');
-            echo "UPD_BUILD_FAIL client_id={$clientId}\n";
-            continue;
-        }
-
-        $tmpPath = tempnam(sys_get_temp_dir(), 'upd_pdf_');
-        if ($tmpPath === false || file_put_contents($tmpPath, $updBytes) === false) {
-            if (is_string($tmpPath) && $tmpPath !== '' && is_file($tmpPath)) {
-                @unlink($tmpPath);
-            }
-            $events->markFail((int) $ev['id'], 'UPD_TEMP_FILE_FAIL', '');
-            echo "UPD_TEMP_FAIL client_id={$clientId}\n";
-            continue;
-        }
-
-        $updFileName = 'УДП_' . FinanceFileStorage::sanitizeFileName($clientName) . '_' . date('dmY') . '.pdf';
-        $send = $diadoc->sendUpdPdf(
+        $updFileName = 'УДП_' . FinanceFileStorage::sanitizeFileName($clientName) . '_' . date('dmY') . '.xml';
+        $send = $diadoc->sendUpdXml(
             $recipientInn,
-            $updFileName,
-            $tmpPath,
-            (string) $doc['doc_date'],
-            (int) round((float) $doc['total_sum']),
-            (string) $doc['doc_number']
+            [
+                'document_date' => (string)$doc['doc_date'],
+                'document_number' => (string)$doc['doc_number'],
+                'total_sum' => (float)$doc['total_sum'],
+                'document_name' => 'Универсальный передаточный документ',
+                'document_creator' => (string)($settings['finance_legal_name'] ?: 'DASH CRM'),
+                'item_name' => 'Услуги',
+                'item_subtotal' => (float)$doc['total_sum'],
+                'file_name' => $updFileName,
+            ]
         );
-        @unlink($tmpPath);
 
         if ($send[0]) {
             $events->markSuccess((int) $ev['id'], is_string($send[2]) ? $send[2] : '');
@@ -434,27 +406,6 @@ h1 { font-size: 16px; margin: 0 0 10px 0; }
 
 </body>
 </html>";
-}
-
-function buildUpdHtml($orgName, $orgInn, $orgKpp, $orgAddress, $orgBank, $clientName, $clientLegalAddress, $clientInn, $clientKpp, $updNumber, $updDate, array $items, $sum)
-{
-    $html = buildActHtml(
-        $orgName,
-        $orgInn,
-        $orgKpp,
-        $orgAddress,
-        $orgBank,
-        $clientName,
-        $clientLegalAddress,
-        $clientInn,
-        $clientKpp,
-        $updNumber,
-        $updDate,
-        $items,
-        $sum
-    );
-
-    return str_replace('Акт №', 'УДП №', $html);
 }
 
 function loadClientActItemsAndSum(mysqli $db, int $clientId): array
